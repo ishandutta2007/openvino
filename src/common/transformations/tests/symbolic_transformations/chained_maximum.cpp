@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,14 +6,12 @@
 
 #include <gtest/gtest.h>
 
-#include <openvino/core/model.hpp>
-#include <openvino/op/broadcast.hpp>
-#include <openvino/op/maximum.hpp>
-#include <openvino/op/parameter.hpp>
-#include <openvino/op/shape_of.hpp>
-
 #include "common_test_utils/ov_test_utils.hpp"
-#include "openvino/core/dimension_tracker.hpp"
+#include "openvino/core/model.hpp"
+#include "openvino/op/broadcast.hpp"
+#include "openvino/op/maximum.hpp"
+#include "openvino/op/parameter.hpp"
+#include "openvino/op/shape_of.hpp"
 #include "transformations/symbolic_transformations/symbolic_optimizations.hpp"
 
 using namespace ov;

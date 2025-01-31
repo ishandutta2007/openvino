@@ -1,4 +1,4 @@
-# Copyright (C) 2022 Intel Corporation
+# Copyright (C) 2022-2024 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -10,7 +10,8 @@ from common.utils.tflite_utils import get_tflite_results, save_tf2_saved_model_t
 def save_to_tf2_savedmodel(tf2_model, path_to_saved_tf2_model):
     import tensorflow as tf
     assert int(tf.__version__.split('.')[0]) >= 2, "TensorFlow 2 must be used for this suite validation"
-    tf.keras.models.save_model(tf2_model, path_to_saved_tf2_model, save_format='tf')
+    # Since TF 2.16 this is only way to serialize Keras objects into SavedModel format
+    tf2_model.export(path_to_saved_tf2_model)
     assert os.path.isdir(path_to_saved_tf2_model), "the model haven't been saved " \
                                                    "here: {}".format(path_to_saved_tf2_model)
     return path_to_saved_tf2_model
@@ -32,13 +33,13 @@ class CommonTF2LayerTest(CommonLayerTest):
             return self.get_tf2_keras_results(inputs_dict, model_path)
         else:
             # get results from tflite
-            return get_tflite_results(self.use_new_frontend, self.use_old_api, inputs_dict, model_path)
+            return get_tflite_results(self.use_legacy_frontend, inputs_dict, model_path)
 
     def get_tf2_keras_results(self, inputs_dict, model_path):
         import tensorflow as tf
 
         result = dict()
-        if self.use_new_frontend:
+        if not self.use_legacy_frontend:
             imported = tf.saved_model.load(model_path)
             f = imported.signatures["serving_default"]
             result = f(**inputs_dict)

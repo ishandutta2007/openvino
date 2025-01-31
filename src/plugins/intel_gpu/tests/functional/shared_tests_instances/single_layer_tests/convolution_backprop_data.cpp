@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -29,7 +29,7 @@ const std::vector<ov::element::Type> netPrecisions2D = {
 const std::vector<std::vector<ov::Shape>> inputShapes2D = {{{1, 3, 30, 30}},
                                                            {{1, 16, 10, 10}},
                                                            {{1, 32, 10, 10}}};
-const std::vector<std::vector<size_t >> kernels2D = {/*{1, 1},*/ {3, 3}, {3, 5}};
+const std::vector<std::vector<size_t >> kernels2D = {{1, 1}, {3, 3}, {3, 5}};
 const std::vector<std::vector<size_t >> strides2D = {{1, 3}};
 const std::vector<std::vector<ptrdiff_t>> padBegins2D = {{0, 0}};
 const std::vector<std::vector<ptrdiff_t>> padEnds2D = {{0, 0}, {1, 1}};
@@ -137,7 +137,7 @@ const auto conv3DParams_ExplicitPadding = ::testing::Combine(
         ::testing::ValuesIn(padEnds3D),
         ::testing::ValuesIn(dilations3D),
         ::testing::ValuesIn(numOutChannels),
-        ::testing::Values(ngraph::op::PadType::EXPLICIT),
+        ::testing::Values(ov::op::PadType::EXPLICIT),
         ::testing::ValuesIn(emptyOutputPadding)
 );
 const auto conv3DParams_AutoPadValid = ::testing::Combine(
@@ -147,7 +147,7 @@ const auto conv3DParams_AutoPadValid = ::testing::Combine(
         ::testing::Values(std::vector<ptrdiff_t>({0, 0, 0})),
         ::testing::ValuesIn(dilations3D),
         ::testing::ValuesIn(numOutChannels),
-        ::testing::Values(ngraph::op::PadType::VALID),
+        ::testing::Values(ov::op::PadType::VALID),
         ::testing::ValuesIn(emptyOutputPadding)
 );
 
@@ -211,4 +211,40 @@ INSTANTIATE_TEST_SUITE_P(smoke_ConvolutionBackpropData3D_AutoPadding_OutputPaddi
                                 ::testing::Values(ov::test::utils::DEVICE_GPU)),
                         ConvolutionBackpropDataLayerTest::getTestCaseName);
 
+const std::vector<size_t> numOutChannels1d = {256};
+
+/* ============= 1D ConvolutionBackpropData ============= */
+const std::vector<ov::element::Type> netPrecisions1D = {
+        ov::element::f32
+};
+
+const std::vector<std::vector<ov::Shape>> inputShapes1D = {{{1, 512, 577}}};
+const std::vector<std::vector<size_t >> kernels1D = {{16}};
+const std::vector<std::vector<size_t >> strides1D = {{8}};
+const std::vector<std::vector<ptrdiff_t>> padBegins1D = {{4}};
+const std::vector<std::vector<ptrdiff_t>> padEnds1D = {{4}};
+const std::vector<std::vector<size_t >> dilations1D = {{1}};
+
+
+const std::vector<std::vector<ptrdiff_t>> outputPadding1D = {{0}};
+
+const auto conv1DParams_ExplicitPadding_output_padding = ::testing::Combine(
+        ::testing::ValuesIn(kernels1D),
+        ::testing::ValuesIn(strides1D),
+        ::testing::ValuesIn(padBegins1D),
+        ::testing::ValuesIn(padEnds1D),
+        ::testing::ValuesIn(dilations1D),
+        ::testing::ValuesIn(numOutChannels1d),
+        ::testing::Values(ov::op::PadType::EXPLICIT),
+        ::testing::ValuesIn(outputPadding1D)
+);
+
+INSTANTIATE_TEST_SUITE_P(smoke_ConvolutionBackpropData1D_ExplicitPadding, ConvolutionBackpropDataLayerTest,
+                        ::testing::Combine(
+                                conv1DParams_ExplicitPadding_output_padding,
+                                ::testing::ValuesIn(netPrecisions1D),
+                                ::testing::ValuesIn(ov::test::static_shapes_to_test_representation(inputShapes1D)),
+                                ::testing::ValuesIn(emptyOutputShape),
+                                ::testing::Values(ov::test::utils::DEVICE_GPU)),
+                        ConvolutionBackpropDataLayerTest::getTestCaseName);
 }  // namespace

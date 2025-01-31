@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,8 +7,9 @@
 #include "openvino/core/type.hpp"
 #include "openvino/core/visibility.hpp"
 
-#define _OPENVINO_RTTI_EXPAND(X)                                  X
-#define _OPENVINO_RTTI_DEFINITION_SELECTOR(_1, _2, _3, NAME, ...) NAME
+#define _OPENVINO_RTTI_EXPAND(X)                                    X
+#define _OPENVINO_RTTI_DEFINITION_SELECTOR_2(_1, _2, NAME, ...)     NAME
+#define _OPENVINO_RTTI_DEFINITION_SELECTOR_3(_1, _2, _3, NAME, ...) NAME
 
 #define _OPENVINO_RTTI_WITH_TYPE(TYPE_NAME) _OPENVINO_RTTI_WITH_TYPE_VERSION(TYPE_NAME, "util")
 
@@ -18,9 +19,7 @@
         type_info_static.hash();                                                          \
         return type_info_static;                                                          \
     }                                                                                     \
-    const ::ov::DiscreteTypeInfo& get_type_info() const override {                        \
-        return get_type_info_static();                                                    \
-    }
+    const ::ov::DiscreteTypeInfo& get_type_info() const override { return get_type_info_static(); }
 
 #define _OPENVINO_RTTI_WITH_TYPE_VERSION_PARENT(TYPE_NAME, VERSION_NAME, PARENT_CLASS) \
     _OPENVINO_RTTI_WITH_TYPE_VERSIONS_PARENT(TYPE_NAME, VERSION_NAME, PARENT_CLASS)
@@ -33,9 +32,7 @@
         type_info_static.hash();                                                               \
         return type_info_static;                                                               \
     }                                                                                          \
-    const ::ov::DiscreteTypeInfo& get_type_info() const override {                             \
-        return get_type_info_static();                                                         \
-    }
+    const ::ov::DiscreteTypeInfo& get_type_info() const override { return get_type_info_static(); }
 
 /// Helper macro that puts necessary declarations of RTTI block inside a class definition.
 /// Should be used in the scope of class that requires type identification besides one provided by
@@ -91,11 +88,11 @@
 /// OPENVINO_RTTI(name, version_id)
 /// OPENVINO_RTTI(name, version_id, parent)
 /// OPENVINO_RTTI(name, version_id, parent, old_version)
-#define OPENVINO_RTTI(...)                                                                            \
-    _OPENVINO_RTTI_EXPAND(_OPENVINO_RTTI_DEFINITION_SELECTOR(__VA_ARGS__,                             \
-                                                             _OPENVINO_RTTI_WITH_TYPE_VERSION_PARENT, \
-                                                             _OPENVINO_RTTI_WITH_TYPE_VERSION,        \
-                                                             _OPENVINO_RTTI_WITH_TYPE)(__VA_ARGS__))
+#define OPENVINO_RTTI(...)                                                                              \
+    _OPENVINO_RTTI_EXPAND(_OPENVINO_RTTI_DEFINITION_SELECTOR_3(__VA_ARGS__,                             \
+                                                               _OPENVINO_RTTI_WITH_TYPE_VERSION_PARENT, \
+                                                               _OPENVINO_RTTI_WITH_TYPE_VERSION,        \
+                                                               _OPENVINO_RTTI_WITH_TYPE)(__VA_ARGS__))
 
 /// Note: Please don't use this macros for new operations
 #define BWDCMP_RTTI_DECLARATION

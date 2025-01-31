@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -59,6 +60,12 @@ bool parse_and_check_command_line(int argc, char* argv[]) {
     }
     if (FLAGS_api != "async" && FLAGS_api != "sync") {
         throw std::logic_error("Incorrect API. Please set -api option to `sync` or `async` value.");
+    }
+    if (FLAGS_api == "sync") {
+        if ((FLAGS_t == 0) && (FLAGS_nireq > FLAGS_niter)) {
+            throw std::logic_error(
+                "Number of iterations should be greater than number of infer requests when using sync API.");
+        }
     }
     if (!FLAGS_hint.empty() && FLAGS_hint != "throughput" && FLAGS_hint != "tput" && FLAGS_hint != "latency" &&
         FLAGS_hint != "cumulative_throughput" && FLAGS_hint != "ctput" && FLAGS_hint != "none") {
@@ -125,43 +132,52 @@ void next_step(const std::string additional_info = "") {
               << (additional_info.empty() ? "" : " (" + additional_info + ")") << std::endl;
 }
 
-ov::hint::PerformanceMode get_performance_hint(const std::string& device, const ov::Core& core) {
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    ov::hint::PerformanceMode ov_perf_hint = ov::hint::PerformanceMode::UNDEFINED;
-    OPENVINO_SUPPRESS_DEPRECATED_END
+void handle_performance_hint(const std::string& device, const ov::Core& core, ov::AnyMap& config) {
+    ov::hint::PerformanceMode ov_perf_hint = ov::hint::PerformanceMode::THROUGHPUT;
     auto supported_properties = core.get_property(device, ov::supported_properties);
     if (std::find(supported_properties.begin(), supported_properties.end(), ov::hint::performance_mode) !=
         supported_properties.end()) {
-        if (FLAGS_hint != "") {
+        // Use FLAGS_hint to decide performance mode:
+        //
+        // "throughput" or "tput": THROUGHPUT mode
+        // "cumulative_throughput" or "ctput": CUMULATIVE_THROUGHPUT mode
+        // "latency": LATENCY mode
+        // "none": not set ov::hint::performance_mode, let plugin use its default performance mode
+        // ""    : use default THROUGHPUT mode, if FLAG_api="sync" then set LATENCY mode
+        if (FLAGS_hint != "" && FLAGS_hint != "none") {
             if (FLAGS_hint == "throughput" || FLAGS_hint == "tput") {
                 ov_perf_hint = ov::hint::PerformanceMode::THROUGHPUT;
             } else if (FLAGS_hint == "latency") {
                 ov_perf_hint = ov::hint::PerformanceMode::LATENCY;
             } else if (FLAGS_hint == "cumulative_throughput" || FLAGS_hint == "ctput") {
                 ov_perf_hint = ov::hint::PerformanceMode::CUMULATIVE_THROUGHPUT;
-            } else if (FLAGS_hint == "none") {
-                OPENVINO_SUPPRESS_DEPRECATED_START
-                ov_perf_hint = ov::hint::PerformanceMode::UNDEFINED;
-                OPENVINO_SUPPRESS_DEPRECATED_END
             } else {
                 throw std::logic_error(
                     "Incorrect performance hint. Please set -hint option to"
                     "`throughput`(tput), `latency', 'cumulative_throughput'(ctput) value or 'none'.");
             }
-        } else {
-            ov_perf_hint =
-                FLAGS_api == "async" ? ov::hint::PerformanceMode::THROUGHPUT : ov::hint::PerformanceMode::LATENCY;
-
+        } else if (FLAGS_hint == "") {
+            ov_perf_hint = ov::hint::PerformanceMode::THROUGHPUT;
+            if (FLAGS_api == "sync") {
+                ov_perf_hint = ov::hint::PerformanceMode::LATENCY;
+            }
             slog::warn << "Performance hint was not explicitly specified in command line. "
                           "Device("
                        << device << ") performance hint will be set to " << ov_perf_hint << "." << slog::endl;
         }
+
+        if (FLAGS_hint != "none") {
+            // apply command line hint setting and override if hint exists
+            config[ov::hint::performance_mode.name()] = ov_perf_hint;
+        } else {
+            config.erase(ov::hint::performance_mode.name());
+        }
     } else {
-        if (FLAGS_hint != "") {
+        if (FLAGS_hint != "none" || FLAGS_hint != "") {
             slog::warn << "Device(" << device << ") does not support performance hint property(-hint)." << slog::endl;
         }
     }
-    return ov_perf_hint;
+    return;
 }
 
 void setDeviceProperty(ov::Core& core,
@@ -367,20 +383,7 @@ int main(int argc, char* argv[]) {
         // Update config per device according to command line parameters
         for (auto& device : devices) {
             auto& device_config = config[device];
-            auto ov_perf_hint = get_performance_hint(device, core);
-            OPENVINO_SUPPRESS_DEPRECATED_START
-            if (isFlagSetInCommandLine("hint")) {
-                if (ov_perf_hint != ov::hint::PerformanceMode::UNDEFINED) {
-                    // apply command line hint setting and override if hint exists
-                    device_config[ov::hint::performance_mode.name()] = ov_perf_hint;
-                } else {
-                    device_config.erase(ov::hint::performance_mode.name());
-                }
-            } else if (ov_perf_hint != ov::hint::PerformanceMode::UNDEFINED) {
-                // keep hint setting in the config if no hint setting from command line
-                device_config.emplace(ov::hint::performance_mode(ov_perf_hint));
-            }
-            OPENVINO_SUPPRESS_DEPRECATED_END
+            handle_performance_hint(device, core, device_config);
 
             if (FLAGS_nireq != 0)
                 device_config[ov::hint::num_requests.name()] = unsigned(FLAGS_nireq);
@@ -421,18 +424,14 @@ int main(int argc, char* argv[]) {
             OPENVINO_SUPPRESS_DEPRECATED_START
             // the rest are individual per-device settings (overriding the values set with perf modes)
             auto set_throughput_streams = [&]() {
-                std::string key = getDeviceTypeFromName(device) + "_THROUGHPUT_STREAMS";
+                std::string key = ov::num_streams.name();
                 auto it_device_nstreams = device_nstreams.find(device);
                 if (it_device_nstreams != device_nstreams.end()) {
                     // set to user defined value
-                    if (supported(key)) {
-                        device_config[key] = it_device_nstreams->second;
-                    } else if (supported(ov::num_streams.name())) {
-                        // Use API 2.0 key for streams
-                        key = ov::num_streams.name();
+                    if (supported(ov::num_streams.name())) {
+                        // Use OpenVINO API key for streams
                         device_config[key] = it_device_nstreams->second;
                     } else if (is_virtual_device(device)) {
-                        key = ov::num_streams.name();
                         update_device_config_for_virtual_device(it_device_nstreams->second,
                                                                 device_config,
                                                                 ov::num_streams);
@@ -443,8 +442,7 @@ int main(int argc, char* argv[]) {
                                                "<dev1>:<nstreams1>,<dev2>:<nstreams2>" +
                                                " or via configuration file.");
                     }
-                } else if (ov_perf_hint == ov::hint::PerformanceMode::UNDEFINED && !device_config.count(key) &&
-                           (FLAGS_api == "async")) {
+                } else if (FLAGS_api == "none" && !device_config.count(key) && (FLAGS_api == "async")) {
                     slog::warn << "-nstreams default value is determined automatically for " << device
                                << " device. "
                                   "Although the automatic selection usually provides a "
@@ -453,22 +451,18 @@ int main(int argc, char* argv[]) {
                                   "information look at README."
                                << slog::endl;
 
-                    if (supported(key)) {
-                        device_config[key] = std::string(getDeviceTypeFromName(device) + "_THROUGHPUT_AUTO");
-                    } else if (supported(ov::num_streams.name())) {
-                        // Use API 2.0 key for streams
-                        key = ov::num_streams.name();
+                    if (supported(ov::num_streams.name())) {
+                        // Use OpenVINO API key for streams
                         device_config[key] = ov::streams::AUTO;
                     } else if (is_virtual_device(device)) {
                         // Set nstreams to default value auto if no nstreams specified from cmd line.
                         for (auto& hwdevice : hardware_devices) {
-                            std::string key = std::string(getDeviceTypeFromName(hwdevice) + "_THROUGHPUT_STREAMS");
-                            auto value = std::string(getDeviceTypeFromName(hwdevice) + "_THROUGHPUT_AUTO");
+                            ov::Any value = ov::streams::AUTO;
                             setDeviceProperty(core,
                                               hwdevice,
                                               device_config,
                                               ov::num_streams(ov::streams::AUTO),
-                                              std::make_pair(key, value));
+                                              std::make_pair(key, value.as<std::string>()));
                         }
                     }
                 }
@@ -498,19 +492,11 @@ int main(int argc, char* argv[]) {
                 }
             };
 
-            auto fix_pin_option = [](const std::string& str) -> std::string {
-                if (str == "NO")
-                    return "NONE";
-                else if (str == "YES")
-                    return "CORE";
-                else
-                    return str;
-            };
-
             auto set_nthreads_pin = [&](const std::string& str) {
-                auto property_name = str == "nthreads" ? ov::inference_num_threads.name() : ov::affinity.name();
+                auto property_name =
+                    str == "nthreads" ? ov::inference_num_threads.name() : ov::hint::enable_cpu_pinning.name();
                 auto property = str == "nthreads" ? ov::inference_num_threads(int(FLAGS_nthreads))
-                                                  : ov::affinity(fix_pin_option(FLAGS_pin));
+                                                  : ov::hint::enable_cpu_pinning(FLAGS_pin);
                 if (supported(property_name) || device_name == "AUTO") {
                     // create nthreads/pin primary property for HW device or AUTO if -d is AUTO directly.
                     device_config[property.first] = property.second;
@@ -537,9 +523,7 @@ int main(int argc, char* argv[]) {
             }
         }
         auto result = std::find_if(config.begin(), config.end(), [&](const std::pair<std::string, ov::AnyMap>& item) {
-            if (device_name.find(item.first) == 0)
-                return true;
-            return false;
+            return device_name.find(item.first) == 0;
         });
         ov::AnyMap device_config = {};
         if (result != config.end())
@@ -562,6 +546,11 @@ int main(int argc, char* argv[]) {
         }
 
         bool isDynamicNetwork = false;
+        auto areNetworkInputsDynamic = [](const benchmark_app::InputsInfo& input_info) {
+            return std::any_of(input_info.begin(), input_info.end(), [](const auto& info) {
+                return info.second.partialShape.is_dynamic();
+            });
+        };
 
         if (FLAGS_load_from_file && !isNetworkCompiled) {
             if (!FLAGS_mean_values.empty() || !FLAGS_scale_values.empty()) {
@@ -736,12 +725,7 @@ int main(int argc, char* argv[]) {
             model = preproc.build();
 
             // Check if network has dynamic shapes
-            auto input_info = app_inputs_info[0];
-            isDynamicNetwork = std::any_of(input_info.begin(),
-                                           input_info.end(),
-                                           [](const std::pair<std::string, benchmark_app::InputInfo>& i) {
-                                               return i.second.partialShape.is_dynamic();
-                                           });
+            isDynamicNetwork = areNetworkInputsDynamic(app_inputs_info.at(0));
 
             topology_name = model->get_friendly_name();
 
@@ -803,6 +787,12 @@ int main(int argc, char* argv[]) {
                                               FLAGS_scale_values,
                                               FLAGS_mean_values,
                                               compiledModel.inputs());
+            isDynamicNetwork = areNetworkInputsDynamic(app_inputs_info.at(0));
+
+            batchSize = get_batch_size(app_inputs_info.at(0));
+            warn_if_no_batch(app_inputs_info.at(0));
+            slog::info << "Model batch size: " << batchSize << slog::endl;
+
             if (batchSize == 0) {
                 batchSize = 1;
             }
@@ -842,11 +832,6 @@ int main(int argc, char* argv[]) {
                 for (auto& item : devices_properties) {
                     slog::info << "  " << item.first << ": " << slog::endl;
                     for (auto& item2 : item.second.as<ov::AnyMap>()) {
-                        OPENVINO_SUPPRESS_DEPRECATED_START
-                        if (item2.first == ov::supported_properties || item2.first == "SUPPORTED_CONFIG_KEYS)" ||
-                            item2.first == "SUPPORTED_METRICS")
-                            continue;
-                        OPENVINO_SUPPRESS_DEPRECATED_END
                         slog::info << "    " << item2.first << ": " << item2.second.as<std::string>() << slog::endl;
                     }
                 }
@@ -953,6 +938,7 @@ int main(int argc, char* argv[]) {
         // create vector to store remote input blobs buffer
         std::vector<::gpu::BufferType> clInputsBuffer;
         bool useGpuMem = false;
+        bool useNpuMem = false;
 
         std::map<std::string, ov::TensorVector> inputsData;
         if (isFlagSetInCommandLine("use_device_mem")) {
@@ -973,6 +959,12 @@ int main(int argc, char* argv[]) {
                         app_inputs_info[0],
                         nireq);
                 }
+            } else if (device_name.find("NPU") == 0) {
+                inputsData = ::npu::get_remote_input_tensors(inputFiles,
+                                                             app_inputs_info,
+                                                             compiledModel,
+                                                             inferRequestsQueue.requests.size());
+                useNpuMem = true;
             } else {
                 OPENVINO_THROW("Requested device doesn't support `use_device_mem` option.");
             }
@@ -1042,6 +1034,8 @@ int main(int argc, char* argv[]) {
                     const auto& inputTensor = inputsData.at(inputName)[i % inputsData.at(inputName).size()];
                     // for remote blobs setTensor is used, they are already allocated on the device
                     if (useGpuMem) {
+                        inferRequest->set_tensor(inputName, inputTensor);
+                    } else if (useNpuMem) {
                         inferRequest->set_tensor(inputName, inputTensor);
                     } else {
                         auto requestTensor = inferRequest->get_tensor(inputName);
@@ -1155,6 +1149,12 @@ int main(int argc, char* argv[]) {
 
             execTime = std::chrono::duration_cast<ns>(Time::now() - startTime).count();
             processedFramesN += batchSize;
+
+            if (FLAGS_max_irate > 0) {
+                auto nextRunFinishTime = 1 / FLAGS_max_irate * processedFramesN * 1.0e9;
+                std::this_thread::sleep_for(
+                    std::chrono::nanoseconds(static_cast<int64_t>(nextRunFinishTime - execTime)));
+            }
         }
 
         // wait the latest inference executions

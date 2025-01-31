@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -81,8 +81,7 @@ TestRunnerProposal<Dtype, ImInfoType>::TestRunnerProposal(cldnn::tensor image_in
                                         pre_nms_topn,
                                         post_nms_topn,
                                         ratios,
-                                        scales,
-                                        padding())
+                                        scales)
 {
     _topology.add(input_layout(cls_scores_name, _cls_scores_layout));
     _topology.add(input_layout(bbox_pred_name, _bbox_pred_layout));
@@ -93,15 +92,17 @@ TestRunnerProposal<Dtype, ImInfoType>::TestRunnerProposal(cldnn::tensor image_in
     if (is_caching_test) {
         membuf mem_buf;
         {
-            cldnn::network _network(get_test_engine(), _topology);
             std::ostream out_mem(&mem_buf);
             BinaryOutputBuffer ob = BinaryOutputBuffer(out_mem);
-            _network.save(ob);
+            ob.set_stream(get_test_stream_ptr().get());
+            program::build_program(get_test_engine(), _topology, {})->save(ob);
         }
         {
             std::istream in_mem(&mem_buf);
             BinaryInputBuffer ib = BinaryInputBuffer(in_mem, get_test_engine());
-            _network.reset(new network(ib, get_test_stream_ptr(), get_test_engine(), true, 0));
+            auto imported_prog = std::make_shared<cldnn::program>(get_test_engine());
+            imported_prog->load(ib);
+            _network.reset(new network(imported_prog));
         }
     } else {
         _network.reset(new network(get_test_engine(), _topology));

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,13 +8,14 @@
 #    include <opencv2/imgproc/types_c.h>
 
 #    include <opencv2/imgproc.hpp>
+#    include <random>
 
 #    include "base_reference_test.hpp"
+#    include "functional_test_utils/common_utils.hpp"
+#    include "functional_test_utils/skip_tests_config.hpp"
 #    include "openvino/core/preprocess/pre_post_process.hpp"
-#    include "ov_models/builders.hpp"
-#    include "shared_test_classes/base/layer_test_utils.hpp"
-#    include "shared_test_classes/single_layer/convert_color_i420.hpp"
-#    include "shared_test_classes/single_layer/convert_color_nv12.hpp"
+#    include "openvino/op/add.hpp"
+#    include "shared_test_classes/base/utils/generate_inputs.hpp"
 
 using namespace ov;
 using namespace ov::preprocess;
@@ -35,20 +36,11 @@ public:
 /// between pixels is expected
 class PreprocessOpenCVReferenceTest_8U : public PreprocessOpenCVReferenceTest {
 public:
-    void Validate() override {
+    PreprocessOpenCVReferenceTest_8U() {
         threshold = 1.f;
         abs_threshold = 1.f;
-        // No pixels with deviation of more than 1 color step
-        CommonReferenceTest::Validate();
-        // Less than 2% of deviations with 1 color step. 2% is experimental value
-        // For very precise (acceptable) float calculations - 1.4% deviation with G-API/OpenCV is observed
-        LayerTestsDefinitions::NV12TestUtils::ValidateColors(refOutData[0].data<uint8_t>(),
-                                                             actualOutData[0].data<uint8_t>(),
-                                                             refOutData[0].get_size(),
-                                                             0.02);
     }
 };
-
 }  // namespace
 
 static std::shared_ptr<Model> create_simple_function(element::Type type, const PartialShape& shape) {
@@ -205,7 +197,7 @@ TEST_F(PreprocessOpenCVReferenceTest_8U, convert_i420_full_color_range) {
     int b_dim = 255 / b_step + 1;
 
     // Test various possible r/g/b values within dimensions
-    auto ov20_input_yuv = LayerTestsDefinitions::I420TestUtils::color_test_image(height, width, b_step);
+    auto ov20_input_yuv = ov::test::utils::color_test_image(height, width, b_step, ColorFormat::I420_SINGLE_PLANE);
 
     auto full_height = height * b_dim;
     auto func_shape = Shape{1, full_height, width, 3};
@@ -239,7 +231,7 @@ TEST_F(PreprocessOpenCVReferenceTest_8U, convert_nv12_full_color_range) {
     int b_dim = 255 / b_step + 1;
 
     // Test various possible r/g/b values within dimensions
-    auto ov20_input_yuv = LayerTestsDefinitions::NV12TestUtils::color_test_image(height, width, b_step);
+    auto ov20_input_yuv = ov::test::utils::color_test_image(height, width, b_step, ColorFormat::NV12_SINGLE_PLANE);
 
     auto full_height = height * b_dim;
     auto func_shape = Shape{1, full_height, width, 3};
@@ -310,12 +302,13 @@ TEST_F(PreprocessOpenCVReferenceTest, resize_u8_simple_linear) {
     // Calculate reference expected values from OpenCV
     cv::Mat cvPic = cv::Mat(2, 2, CV_8UC1, input_img.data());
     cv::Mat cvPicResized;
-    cv::resize(cvPic, cvPicResized, cv::Size(1, 1), cv::INTER_NEAREST);
+    cv::resize(cvPic, cvPicResized, cv::Size(1, 1), 0., 0., cv::INTER_NEAREST);
     refOutData.emplace_back(param->get_element_type(), func_shape, cvPicResized.data);
     // Exec now
     Exec();
 }
 
+// [CVS-132878]
 TEST_F(PreprocessOpenCVReferenceTest_8U, resize_u8_large_picture_linear) {
     const size_t input_height = 50;
     const size_t input_width = 50;
@@ -346,7 +339,7 @@ TEST_F(PreprocessOpenCVReferenceTest_8U, resize_u8_large_picture_linear) {
     // Calculate reference expected values from OpenCV
     cv::Mat cvPic = cv::Mat(input_height, input_width, CV_8UC1, input_img.data());
     cv::Mat cvPicResized;
-    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), cv::INTER_LINEAR_EXACT);
+    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), 0., 0., cv::INTER_LINEAR_EXACT);
     refOutData.emplace_back(param->get_element_type(), func_shape, cvPicResized.data);
     // Exec now
     Exec();
@@ -383,13 +376,13 @@ TEST_F(PreprocessOpenCVReferenceTest, resize_f32_large_picture_linear) {
     // Calculate reference expected values from OpenCV
     cv::Mat cvPic = cv::Mat(input_height, input_width, CV_32FC1, input_img.data());
     cv::Mat cvPicResized;
-    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), cv::INTER_LINEAR_EXACT);
+    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), 0., 0., cv::INTER_LINEAR_EXACT);
     refOutData.emplace_back(param->get_element_type(), func_shape, cvPicResized.data);
     // Exec now
     Exec();
 }
 
-TEST_F(PreprocessOpenCVReferenceTest, DISABLED_resize_f32_large_picture_cubic_small) {
+TEST_F(PreprocessOpenCVReferenceTest, resize_f32_large_picture_cubic_small) {
     const size_t input_height = 4;
     const size_t input_width = 4;
     const size_t func_height = 3;
@@ -410,7 +403,7 @@ TEST_F(PreprocessOpenCVReferenceTest, DISABLED_resize_f32_large_picture_cubic_sm
     // Calculate reference expected values from OpenCV
     cv::Mat cvPic = cv::Mat(input_height, input_width, CV_32FC1, input_img.data());
     cv::Mat cvPicResized;
-    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), cv::INTER_CUBIC);
+    cv::resize(cvPic, cvPicResized, cv::Size(func_width, func_height), 0., 0., cv::INTER_CUBIC);
     refOutData.emplace_back(element_type, func_shape, cvPicResized.data);
     // Exec now
     Exec();

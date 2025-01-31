@@ -1,18 +1,19 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import sys
 
-from openvino.runtime import Type
+import numpy as np
 
 import openvino as ov
+from openvino import Type
 
 
 def is_type(val):
     if isinstance(val, (type, Type)):
         return True
     if 'tensorflow' in sys.modules:
-        import tensorflow as tf
+        import tensorflow as tf # pylint: disable=import-error
         if isinstance(val, tf.dtypes.DType):
             return True
     if 'torch' in sys.modules:
@@ -29,12 +30,13 @@ def is_type(val):
 def to_ov_type(val):
     if isinstance(val, Type):
         return val
-    if isinstance(val, type):
+    if isinstance(val, (type, str, np.dtype)):
         return Type(val)
     if 'tensorflow' in sys.modules:
-        import tensorflow as tf
+        import tensorflow as tf # pylint: disable=import-error
         if isinstance(val, tf.dtypes.DType):
-            return Type(val.as_numpy_dtype())
+            from openvino.frontend.tensorflow.utils import tf_type_to_ov_type  # pylint: disable=no-name-in-module,import-error
+            return tf_type_to_ov_type(val)
     if 'torch' in sys.modules:
         import torch
 
@@ -78,4 +80,3 @@ def to_ov_type(val):
 
             return paddle_to_ov_type[val]
     raise Exception("Unexpected type object. Expected ov.Type, np.dtype, tf.dtypes.DType. Got {}".format(type(val)))
-

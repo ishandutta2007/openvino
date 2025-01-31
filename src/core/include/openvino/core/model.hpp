@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -27,6 +27,8 @@
 
 namespace ov {
 class Model;
+class CompiledModel;
+class ICompiledModel;
 
 std::shared_ptr<Model> clone_ov_model(const Model& func, std::unordered_map<Node*, std::shared_ptr<Node>>& node_map);
 
@@ -42,9 +44,11 @@ class ModelAccessor;
  */
 class OPENVINO_API Model : public std::enable_shared_from_this<Model> {
     friend class frontend::FrontEnd;
+    friend class ov::CompiledModel;
+    friend class ov::ICompiledModel;
     friend std::shared_ptr<Model> clone_ov_model(const Model& func,
                                                  std::unordered_map<Node*, std::shared_ptr<Node>>& node_map);
-    std::shared_ptr<void> m_shared_object;  // Frontend plugin shared object handle.
+    std::shared_ptr<void> m_shared_object;  // plugin shared object handle.
 
 public:
     _OPENVINO_HIDDEN_METHOD static const ::ov::DiscreteTypeInfo& get_type_info_static() {
@@ -103,7 +107,7 @@ public:
     /// based on traversing the graph from the results and the sinks.
     Model(const ov::OutputVector& results, const ov::SinkVector& sinks, const std::string& name = "");
 
-    virtual ~Model() = default;
+    virtual ~Model();
     /// Return the number of outputs for this Model.
     size_t get_output_size() const;
 
@@ -136,10 +140,14 @@ public:
     ov::Output<ov::Node> add_output(const std::string& op_name, size_t output_idx);
     ov::Output<ov::Node> add_output(const ov::Output<ov::Node>& port);
 
-    void reshape(const ov::PartialShape& partial_shape);
-    void reshape(const std::map<size_t, ov::PartialShape>& partial_shapes);
-    void reshape(const std::map<std::string, ov::PartialShape>& partial_shapes);
-    void reshape(const std::map<ov::Output<ov::Node>, ov::PartialShape>& partial_shapes);
+    void reshape(const ov::PartialShape& partial_shape,
+                 const std::unordered_map<std::string, ov::PartialShape>& variable_shapes = {});
+    void reshape(const std::map<size_t, ov::PartialShape>& partial_shapes,
+                 const std::unordered_map<std::string, ov::PartialShape>& variable_shapes = {});
+    void reshape(const std::map<std::string, ov::PartialShape>& partial_shapes,
+                 const std::unordered_map<std::string, ov::PartialShape>& variable_shapes = {});
+    void reshape(const std::map<ov::Output<ov::Node>, ov::PartialShape>& partial_shapes,
+                 const std::unordered_map<std::string, ov::PartialShape>& variable_shapes = {});
 
     /// Return the element type of output i
     const ov::element::Type& get_output_element_type(size_t i) const;
@@ -220,26 +228,6 @@ public:
     /// This method returns -1 if an the passed output is not related to the Results of a model.
     /// \param value Output containing Node
     int64_t get_result_index(const ov::Output<const ov::Node>& value) const;
-
-    /// \deprecated Use evaluate with ov::Tensor instead
-    /// \brief Evaluate the model on inputs, putting results in outputs.
-    /// \param output_tensors Tensors for the outputs to compute. One for each result
-    /// \param input_tensors Tensors for the inputs. One for each inputs.
-    /// \param evaluation_context Storage of additional settings and attributes that can be used
-    /// when evaluating the model. This additional information can be shared across nodes.
-    OPENVINO_DEPRECATED(
-        "This method is deprecated and will be removed soon. Please use evaluate with ov::Tensor instead.")
-    bool evaluate(const ov::HostTensorVector& output_tensors,
-                  const ov::HostTensorVector& input_tensors,
-                  ov::EvaluationContext& evaluation_context) const;
-
-    /// \deprecated Use evaluate with ov::Tensor instead
-    /// \brief Evaluate the model on inputs, putting results in outputs.
-    /// \param output_tensors Tensors for the outputs to compute. One for each result
-    /// \param input_tensors Tensors for the inputs. One for each inputs.
-    OPENVINO_DEPRECATED(
-        "This method is deprecated and will be removed soon. Please use evaluate with ov::Tensor instead.")
-    bool evaluate(const ov::HostTensorVector& output_tensors, const ov::HostTensorVector& input_tensors) const;
 
     /// \brief Evaluate the model on inputs, putting results in outputs.
     /// \param output_tensors Tensors for the outputs to compute. One for each result
@@ -430,7 +418,7 @@ public:
      */
     template <class T, class... Args>
     void set_rt_info(const T& argument, Args... args) {
-        ov::Any& arg = get_rt_arg<Args...>(m_rt_info, args...);
+        ov::Any& arg = get_rt_arg<Args...>(m_rt_info, std::move(args)...);
         arg = argument;
     }
 

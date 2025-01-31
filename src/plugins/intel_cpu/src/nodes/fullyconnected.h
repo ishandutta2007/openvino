@@ -1,28 +1,48 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
-#include <ie_common.h>
 #include <node.h>
+
+#include <cstddef>
 #include <memory>
 #include <oneapi/dnnl/dnnl.hpp>
 #include <string>
+#include <unordered_set>
 #include <vector>
-#include "common/dnnl_executor.h"
+
+#include "cpu_memory.h"
+#include "nodes/executors/executor_factory.hpp"
+#include "nodes/executors/fullyconnected_config.hpp"
+#include "nodes/executors/memory_arguments.hpp"
+#include "post_ops.hpp"
 
 namespace ov {
 namespace intel_cpu {
 namespace node {
 
+// tensor parallel config
+struct FCTensorParallelConfig {
+    int w_rank = -1;
+    int w_size = -1;
+    int id = 0;
+    bool enable_tensor_parallel = false;
+    std::shared_ptr<SubMemoryManager> sub_memory = nullptr;
+    MemoryPtr cached_splited_weight = nullptr;
+    MemoryPtr cached_splited_bias = nullptr;
+    MemoryPtr cached_scale = nullptr;
+    MemoryPtr cached_zeropoint = nullptr;
+    MemoryPtr cached_dst = nullptr;
+};
+
 class FullyConnected : public Node {
 public:
-    FullyConnected(const std::shared_ptr<ngraph::Node>& op, const GraphContext::CPtr context);
+    FullyConnected(const std::shared_ptr<ov::Node>& op, const GraphContext::CPtr& context);
 
-    std::vector<dnnl::memory::format_tag> getAvailableFormatsForDims(const Shape &dims) const override;
-    void getSupportedDescriptors() override;
-    void execute(dnnl::stream strm) override;
+    void getSupportedDescriptors() override{};
+    void execute(const dnnl::stream& strm) override;
     bool created() const override;
 
     bool canBeInPlace() const override {
@@ -34,98 +54,79 @@ public:
     }
 
     const std::vector<impl_desc_type>& getDefaultImplPriority() override;
-    void createDescriptor(const std::vector<MemoryDescPtr>& inputDesc,
-                          const std::vector<MemoryDescPtr>& outputDesc) override;
 
     size_t descInputNumbers() override {
         return static_cast<size_t>(getOriginalInputsNumber());
     }
 
     void initSupportedPrimitiveDescriptors() override;
-    void initOptimalPrimitiveDescriptor() override;
     void createPrimitive() override;
-    std::shared_ptr<MemoryDesc> getSrcMemDesc(const dnnl::primitive_desc &prim_desc, size_t idx) const override;
-    std::shared_ptr<MemoryDesc> getDstMemDesc(const dnnl::primitive_desc &prim_desc, size_t idx) const override;
 
-    InferenceEngine::Precision getRuntimePrecision() const override;
+    ov::element::Type getRuntimePrecision() const override;
 
     bool canFuse(const NodePtr& node) const override;
 
-    static bool isSupportedOperation(const std::shared_ptr<const ngraph::Node>& op, std::string& errorMessage) noexcept;
+    static bool isSupportedOperation(const std::shared_ptr<const ov::Node>& op, std::string& errorMessage) noexcept;
+    static bool isSupportedCompressedOperation(const std::shared_ptr<ov::Node>& op,
+                                               size_t IC,
+                                               size_t OC,
+                                               size_t G,
+                                               ov::element::Type inferencePrecision) noexcept;
+    static ov::element::TypeVector getSupportedCompressedWeightsTypes();
+    static ov::element::TypeVector getSupportedCompressedActivationsTypes();
 
-    void prepareParams() override;
-    void executeDynamicImpl(dnnl::stream strm) override;
-    bool canBeExecutedInInt8() const override;
-    void keepWeightsNonTransposed(bool weightsNonTransposed) {
-        this->weightsNonTransposed = weightsNonTransposed;
+    bool isExecutable() const override {
+        return !isInputTensorAtPortEmpty(0);
     }
 
-    void fuseDecompressionMultiply(const NodePtr& constData);
-    void fuseDecompressionSubtract(const NodePtr& constData);
+    void prepareParams() override;
+    void executeDynamicImpl(const dnnl::stream& strm) override;
+    bool canBeExecutedInInt8() const override;
+    void keepWeightsNonTransposed(bool weightsNonTransposed) {
+        this->attrs.weightsNonTransposed = weightsNonTransposed;
+    }
+
+    void fuseDecompressionMultiply(const MemoryCPtr& memory);
+    void fuseDecompressionSubtract(const MemoryCPtr& memory);
+
+protected:
+    void toNumaNodeImpl(int numaID) override;
 
 private:
-    void createDescriptorInternal(const dnnl::memory::desc &inputDesc,
-                                  const dnnl::memory::desc &outputDesc);
+    enum InputId : size_t {
+        DATA = 0,
+        WEIGHTS,
+        BIAS,
+        WEIGHT_SCALES,
+        WEIGHT_ZERO_POINTS,
+        INPUT_SCALES,
+        INPUT_ZERO_POINTS,
+        OUTPUT_SCALES,
+        OUTPUT_ZERO_POINTS,
+    };
 
-    VectorDims makeDummyInputDims() const;
-    VectorDims makeDummyOutputDims(const VectorDims& inDims) const;
+    static bool isConstantInput(const std::shared_ptr<const ov::Node>& op, InputId port);
 
-    VectorDims inDims;
-    VectorDims outDims;
+    std::unordered_map<size_t, size_t> m_atoi;  // memory argument id to input id
 
-    void setPostOps(dnnl::primitive_attr &attr, const VectorDims &dims);
+    void fuseDecompressionConstant(const MemoryCPtr& memory, MemoryCPtr& decompressionValuesPtr);
 
-    bool withBiases = false;
+    void initTensorParallelConfig(const GraphContext::CPtr& context);
+    void needUpdateTensorParalelConfig();
+    void needPrepareParamsForTensorParallel();
+    void initTensorParallelSync();
+    void execTensorParallelSync();
+    void needSplitMemoryForTensorParallel();
 
-    std::string errorPrefix;
-    static const size_t DATA_ID = 0;
-    static const size_t WEIGHTS_ID = 1;
-    static const size_t BIAS_ID = 2;
-    dnnl::memory::data_type outputDataType = dnnl::memory::data_type::undef;
+    FCAttrs attrs;
+    PostOps postOps;
+    MemoryArgs memory;
+    ExecutorFactoryPtr<FCAttrs> factory;
+    ExecutorPtr executor = nullptr;
 
-    using executorPtr = std::shared_ptr<DnnlExecutor>;
-    executorPtr execPtr = nullptr;
-    bool useConv1x1 = false;
-    impl_desc_type implementationTypeIP = impl_desc_type::unknown;
-    MemoryDescPtr weightDescIP;
-    dnnl::primitive_attr attr;
-
-    static dnnl::convolution_forward::primitive_desc
-    createDescriptorInternalForConv(DnnlMemoryDescCPtr inputDescPtr,
-                                    DnnlMemoryDescCPtr weightDescPtr,
-                                    DnnlMemoryDescCPtr biasDescPtr,
-                                    DnnlMemoryDescCPtr outputDescPtr,
-                                    const dnnl::primitive_attr& attr,
-                                    const dnnl::engine& engine);
-
-    bool canBeExecutedInConv1x1() const;
-    void fuseDecompressionConstant(const NodePtr& constData, MemoryCPtr& decompressionValuesPtr);
-
-    // sparse weights
-    bool useSparseWeights = false;
-    float minSparseRate = 1.f;
-    float weiSparseRate = 0.f;
-    bool useSparseWeightsDecompression();
-    VectorDims expectedBiasDims {};
-    bool useMlas = false;
-#ifdef OV_CPU_WITH_MLAS
-    int64_t M, N, K;
-    MemoryPtr mlasPackedPtr = nullptr;
-    void executeMLAS();
-    void prepackMLASWeight();
-#endif
-#if defined(OV_CPU_WITH_ACL)
-    void prepareWeightsUsingDummyShape();
-#endif
-    bool useWeightsDecompressionImpl = false;
-    MemoryCPtr decompressionSubtractPtr = nullptr;
-    MemoryCPtr decompressionMultiplyPtr = nullptr;
-
-    // FC with transposed weights
-    bool weightsNonTransposed = false;
-    DnnlMemoryDescPtr makeTransposedWeightDescriptor(DnnlMemoryDescPtr desc);
+    FCTensorParallelConfig tp_cfg;
 };
 
-}   // namespace node
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace node
+}  // namespace intel_cpu
+}  // namespace ov

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -11,7 +11,6 @@
 
 using namespace reference_tests;
 using namespace ov;
-using namespace InferenceEngine;
 
 namespace {
 struct ExpParams {

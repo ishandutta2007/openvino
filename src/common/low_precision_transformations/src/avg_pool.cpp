@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2023 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,12 +6,13 @@
 
 #include <memory>
 
+#include "itt.hpp"
+#include "openvino/util/log.hpp"
 #include "openvino/opsets/opset1.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 
 #include "low_precision/network_helper.hpp"
 #include "low_precision/rt_info/precision_preserved_attribute.hpp"
-#include "itt.hpp"
 
 namespace ov {
 namespace pass {
@@ -26,26 +27,28 @@ AvgPoolTransformation::AvgPoolTransformation(const Params& params) : LayerTransf
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(matcher, matcher_name);
     this->register_matcher(m, callback);
 }
 
-bool AvgPoolTransformation::transform(TransformationContext& context, ov::pass::pattern::Matcher &m) {
-    if (!canBeTransformed(context, m.get_match_root())) {
+bool AvgPoolTransformation::transform(ov::pass::pattern::Matcher &m) {
+    if (!canBeTransformed(m.get_match_root())) {
         return false;
     }
 
     const std::shared_ptr<Node> pooling = NetworkHelper::separateInStandaloneBranch(m.get_match_root(), defaultPrecisions);
     const bool updatePrecision = isPrecisionPreserved(pooling);
-    moveDequantizationAfter(context, pooling, NetworkHelper::getDequantization(pooling, defaultPrecisions), updatePrecision);
+    const auto newOperation = moveDequantizationAfter(pooling, NetworkHelper::getDequantization(pooling, defaultPrecisions), updatePrecision);
+
+    OPENVINO_DEBUG("LPT: done: ", newOperation);
     return true;
 }
 
-bool AvgPoolTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> operation) const {
-    if (!LayerTransformation::canBeTransformed(context, operation)) {
+bool AvgPoolTransformation::canBeTransformed(const std::shared_ptr<Node>& operation) const {
+    if (!LayerTransformation::canBeTransformed(operation)) {
         return false;
     }
 

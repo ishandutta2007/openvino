@@ -1,12 +1,12 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
+#include "arm_compute/runtime/NEON/NEFunctions.h"
 #include "nodes/executors/convert.hpp"
 #include "utils/debug_capabilities.h"
-#include "arm_compute/runtime/NEON/NEFunctions.h"
 
 namespace ov {
 namespace intel_cpu {
@@ -17,13 +17,15 @@ public:
     bool init(const ConvertParams& convertParams,
               const MemoryDescPtr& srcDesc,
               const MemoryDescPtr& dstDesc,
-              const dnnl::primitive_attr &attr) override;
-    void exec(const MemoryCPtr& src, const MemoryPtr& dst) override;
-    impl_desc_type getImplType() const override { return implDescType; };
+              const dnnl::primitive_attr& attr) override;
+    void exec(const std::vector<MemoryCPtr>& src, const std::vector<MemoryPtr>& dst) override;
+    impl_desc_type implType() const override {
+        return impl_desc_type::acl;
+    };
+
 protected:
     ConvertParams aclConvertParams;
     bool isCopyOp;
-    static const impl_desc_type implDescType = impl_desc_type::acl;
     arm_compute::Tensor srcTensor, dstTensor;
     std::unique_ptr<arm_compute::NECopy> acl_copy;
     std::unique_ptr<arm_compute::NECast> acl_cast;
@@ -39,5 +41,5 @@ public:
     }
 };
 
-} // namespace intel_cpu
-} // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

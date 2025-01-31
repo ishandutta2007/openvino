@@ -4,12 +4,12 @@
 
 #include "reduce.hpp"
 
+#include <utility>
+
 namespace ov {
 namespace intel_cpu {
 
-using namespace InferenceEngine;
+ReduceExecutor::ReduceExecutor(ExecutorContext::CPtr context) : context(std::move(context)) {}
 
-ReduceExecutor::ReduceExecutor(const ExecutorContext::CPtr context) : context(context) {}
-
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

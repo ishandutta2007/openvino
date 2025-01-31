@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,15 +13,14 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief Base class for fuse elementwise to FakeQuantize low precision transformation.
  */
 class LP_TRANSFORMATIONS_API FuseElementwiseToFakeQuantizeTransformation : public CleanupTransformation {
 public:
     FuseElementwiseToFakeQuantizeTransformation(const Params& params);
-    virtual ~FuseElementwiseToFakeQuantizeTransformation() = default;
 
-    bool canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> layer) const override;
+    bool canBeTransformed(const std::shared_ptr<Node>& layer) const override;
 };
 
 } // namespace low_precision

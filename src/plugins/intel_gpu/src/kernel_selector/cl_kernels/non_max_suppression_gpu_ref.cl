@@ -1,6 +1,9 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
+// Copyright (c) Facebook, Inc. and its affiliates.
+// The implementation for rotated boxes intersection is based on the code from:
+// https://github.com/facebookresearch/detectron2/blob/v0.6/detectron2/layers/csrc/box_iou_rotated/box_iou_rotated_utils.h
 
 #include "include/batch_headers/fetch_data.cl"
 
@@ -563,16 +566,6 @@ inline void FUNC(swap)(__global BOX_INFO* a, __global BOX_INFO* b)
     *b = temp;
 }
 
-#ifdef ROTATION
-inline void FUNC(reverseOutputBoxList)(__global BOX_INFO *outBoxes, int boxNum)
-{
-    for (int i = 0; i < boxNum / 2; ++i) {
-        FUNC_CALL(swap)(&outBoxes[i], &outBoxes[boxNum - 1 - i]);
-    }
-}
-
-#else
-
 inline void FUNC(sortOutputBoxList)(__global BOX_INFO *outSortedBoxes, int boxNum)
 {
     for (int i = 0; i < boxNum - 1; ++i) {
@@ -594,7 +587,6 @@ inline void FUNC(sortOutputBoxList)(__global BOX_INFO *outSortedBoxes, int boxNu
             break;
     }
 }
-#endif // ROTATION
 
 
 #ifdef NMS_STAGE_0
@@ -848,16 +840,12 @@ KERNEL (non_max_suppression_ref_stage_3)(
     __global OUTPUT_TYPE *output
     , __global uchar *buffer1
     , __global uchar *buffer2
-    #ifdef SECOND_OUTPUT_TYPE
-    , __global SECOND_OUTPUT_TYPE *selected_scores
-    #endif
-    #ifdef THIRD_OUTPUT_TYPE
-    , __global THIRD_OUTPUT_TYPE *valid_outputs
-    #endif
-    #ifdef MULTIPLE_OUTPUTS
+#ifdef OUTPUT1_TYPE
     , __global OUTPUT1_TYPE *selected_scores
+#endif
+#ifdef OUTPUT2_TYPE
     , __global OUTPUT2_TYPE *valid_outputs
-    #endif
+#endif
     )
 {
     int outputIdx = 0;
@@ -877,11 +865,7 @@ KERNEL (non_max_suppression_ref_stage_3)(
     }
 
 #if SORT_RESULT_DESCENDING == 1
-#ifdef ROTATION
-    FUNC_CALL(reverseOutputBoxList)(sortedBoxList, outputIdx);
-#else
     FUNC_CALL(sortOutputBoxList)(sortedBoxList, outputIdx);
-#endif
 #endif
 
     unroll_for (int i = 0; i < outputIdx; i++) {
@@ -897,21 +881,7 @@ KERNEL (non_max_suppression_ref_stage_3)(
         output[OUTPUT_GET_INDEX(i, 2, 0, 0)] = -1;
     }
 
-#ifdef SECOND_OUTPUT_TYPE
-    unroll_for (int i = 0; i < outputIdx; i++) {
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 0, 0, 0)] = TO_SECOND_OUTPUT_TYPE(sortedBoxList[i].batchId);
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 1, 0, 0)] = TO_SECOND_OUTPUT_TYPE(sortedBoxList[i].classId);
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 2, 0, 0)] = TO_SECOND_OUTPUT_TYPE(sortedBoxList[i].score);
-    }
-
-    // Padding
-    unroll_for (int i = outputIdx; i < OUTPUT_NUM; i++) {
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 0, 0, 0)] = -1;
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 1, 0, 0)] = -1;
-        selected_scores[SECOND_OUTPUT_GET_INDEX(i, 2, 0, 0)] = -1;
-    }
-#endif
-#ifdef MULTIPLE_OUTPUTS
+#ifdef OUTPUT1_TYPE
     unroll_for (int i = 0; i < outputIdx; i++) {
         selected_scores[OUTPUT1_GET_INDEX(i, 0, 0, 0)] = TO_OUTPUT1_TYPE(sortedBoxList[i].batchId);
         selected_scores[OUTPUT1_GET_INDEX(i, 1, 0, 0)] = TO_OUTPUT1_TYPE(sortedBoxList[i].classId);
@@ -926,11 +896,8 @@ KERNEL (non_max_suppression_ref_stage_3)(
     }
 #endif
 
-#ifdef THIRD_OUTPUT_TYPE
-    valid_outputs[THIRD_OUTPUT_GET_INDEX(0, 0, 0, 0)] = TO_THIRD_OUTPUT_TYPE(outputIdx);
-#endif
-#ifdef MULTIPLE_OUTPUTS
+#ifdef OUTPUT2_TYPE
     valid_outputs[OUTPUT2_GET_INDEX(0, 0, 0, 0)] = TO_OUTPUT2_TYPE(outputIdx);
-#endif
+#endif  // OUTPUT1_TYPE
 }
 #endif  /* NMS_STAGE_3 */

@@ -41,7 +41,7 @@ updates:
       - "rkazants"
     versioning-strategy: increase-if-necessary
 
-  # Model Optimizer, openvino_dev and Benchmark tool
+  # ovc and Benchmark tools
   - package-ecosystem: pip
     directory: "/tools"
     schedule:
@@ -59,23 +59,6 @@ updates:
     allow:
       - dependency-name: "*"
         dependency-type: "production"
-    versioning-strategy: increase-if-necessary
-
-  # POT requirements
-  - package-ecosystem: pip
-    directory: "/tools/pot"
-    schedule:
-      interval: "daily"
-      time: "09:00"
-      timezone: "Asia/Dubai"
-    open-pull-requests-limit: 3
-    assignees:
-      - "AlexKoff88"
-      - "KodiaqQ"
-      - "jiwaszki"
-      - "p-wysocki"
-      - "akuporos"
-      - "rkazants"
     versioning-strategy: increase-if-necessary
 
   #
@@ -153,6 +136,21 @@ updates:
       interval: "daily"
       time: "09:00"
       timezone: "Asia/Dubai"
+    assignees:
+      - "akashchi"
+      - "mryzhov"
+      - "ilya-lavrenov"
+    open-pull-requests-limit: 3
+
+  # Docker images
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "Asia/Dubai"
+    allow:
+      - dependency-type: "direct"
     assignees:
       - "akashchi"
       - "mryzhov"

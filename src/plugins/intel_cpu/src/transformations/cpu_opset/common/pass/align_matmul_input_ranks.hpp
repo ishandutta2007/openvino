@@ -1,10 +1,10 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
-#include <ngraph/pass/graph_rewrite.hpp>
+#include "openvino/pass/graph_rewrite.hpp"
 
 /*
  * Description:
@@ -17,11 +17,11 @@
 namespace ov {
 namespace intel_cpu {
 
-class AlignMatMulInputRanks: public ov::pass::MatcherPass {
+class AlignMatMulInputRanks : public ov::pass::MatcherPass {
 public:
-    OPENVINO_RTTI("AlignMatMulInputRanks", "0");
+    OPENVINO_MATCHER_PASS_RTTI("AlignMatMulInputRanks");
     AlignMatMulInputRanks();
 };
 
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

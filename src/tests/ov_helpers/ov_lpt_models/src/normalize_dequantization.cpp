@@ -1,45 +1,48 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "ov_lpt_models/normalize_dequantization.hpp"
 
-#include "ov_models/subgraph_builders.hpp"
+#include "common_test_utils/node_builders/constant.hpp"
 #include "ov_lpt_models/common/builders.hpp"
 #include "ov_ops/type_relaxed.hpp"
 
-namespace ngraph {
+namespace ov {
 namespace builder {
 namespace subgraph {
 
-    std::shared_ptr<ngraph::Function> NormalizeDequantizationFunction::getOriginal(
-        const ngraph::element::Type precision,
-        const ngraph::Shape& inputShape,
-        const ngraph::builder::subgraph::DequantizationOperations dequantization) {
-        const auto input = std::make_shared<ngraph::op::v0::Parameter>(precision, inputShape);
-
+    std::shared_ptr<ov::Model> NormalizeDequantizationFunction::getOriginal(
+        const ov::element::Type precision,
+        const ov::Shape& inputShape,
+        const ov::builder::subgraph::DequantizationOperations dequantization,
+        bool constant_path) {
+        std::shared_ptr<ov::Node> input;
+        ov::ParameterVector params;
+        if (constant_path) {
+            input = ov::test::utils::make_constant(precision, inputShape);
+        } else {
+            auto param = std::make_shared<ov::op::v0::Parameter>(precision, inputShape);
+            params.push_back(param);
+            input = param;
+        }
         const auto deq = makeDequantization(input, dequantization);
 
-        const auto op = ngraph::opset1::MaxPool(
-            deq,
-            Strides{ 1, 1 },
-            Shape{ 1, 1 },
-            Shape{ 0, 0 },
-            Shape{ 2, 2 },
-            op::RoundingType::FLOOR);
-        const auto targetOp = std::make_shared<ov::op::TypeRelaxed<opset1::MaxPool>>(
+        const auto op =
+            ov::opset1::MaxPool(deq, Strides{1, 1}, Shape{1, 1}, Shape{0, 0}, Shape{2, 2}, ov::op::RoundingType::FLOOR);
+        const auto targetOp = std::make_shared<ov::op::TypeRelaxed<ov::opset1::MaxPool>>(
             op,
-            std::vector<element::Type>{ element::f32, element::f32 },
-            std::vector<element::Type>{});
+            std::vector<ov::element::Type>{ov::element::f32, ov::element::f32},
+            std::vector<ov::element::Type>{});
         auto& rtInfo = targetOp->get_rt_info();
         rtInfo["Variant::std::string"] = "targetOp";
 
-        return std::make_shared<ngraph::Function>(
-            ngraph::ResultVector{ std::make_shared<ngraph::opset1::Result>(targetOp) },
-            ngraph::ParameterVector{ input },
+        return std::make_shared<ov::Model>(
+            ov::ResultVector{ std::make_shared<ov::opset1::Result>(targetOp) },
+            params,
             "NormalizeDequantizationFunction");
     }
 
 }  // namespace subgraph
 }  // namespace builder
-}  // namespace ngraph
+}  // namespace ov

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -79,6 +79,9 @@ public:
     condition::branch get_branch_false() const { return node->get_branch_false(); }
 
     void update_output_layout();
+    void postprocess_output_memory(network::ptr executed_net, cldnn::condition::branch& branch);
+
+    static layout adjust_scalar_to_1d_layout(layout& target, layout& other);
 
 private:
     network::ptr _net_true;

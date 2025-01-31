@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -20,6 +20,18 @@ iMatcherConfig::Ptr MatchersManager::get_config(const std::shared_ptr<ov::Node> 
 void MatchersManager::set_shape_strict_match(bool shape_strict_match) {
     for (const auto& matcher : m_matchers) {
         matcher.second->set_strict_shape_match(shape_strict_match);
+    }
+}
+
+void MatchersManager::set_match_attributes(bool match_attribute) {
+    for (const auto& matcher : m_matchers) {
+        matcher.second->set_match_attrib(match_attribute);
+    }
+}
+
+void MatchersManager::set_match_in_types(bool match_in_types) {
+    for (const auto& matcher : m_matchers) {
+        matcher.second->set_match_in_types(match_in_types);
     }
 }
 

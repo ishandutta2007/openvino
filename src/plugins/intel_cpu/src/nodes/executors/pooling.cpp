@@ -4,12 +4,12 @@
 
 #include "pooling.hpp"
 
+#include <utility>
+
 namespace ov {
 namespace intel_cpu {
 
-using namespace InferenceEngine;
+PoolingExecutor::PoolingExecutor(ExecutorContext::CPtr context) : context(std::move(context)) {}
 
-PoolingExecutor::PoolingExecutor(const ExecutorContext::CPtr context) : context(context) {}
-
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

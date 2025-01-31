@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,19 +13,19 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief ClampTransformation propagates dequantization operations through Clamp operation.
  *
  * For more details about the transformation, refer to
  * [ClampTransformation](@ref openvino_docs_OV_UG_lpt_ClampTransformation) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 class LP_TRANSFORMATIONS_API ClampTransformation : public LayerTransformation {
 public:
-    OPENVINO_RTTI("ClampTransformation", "0");
+    OPENVINO_RTTI("ClampTransformation", "0", LayerTransformation);
     ClampTransformation(const Params& params = Params());
-    bool transform(TransformationContext& context, ov::pass::pattern::Matcher& m) override;
-    bool canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> op) const override;
+    bool transform(ov::pass::pattern::Matcher& m) override;
+    bool canBeTransformed(const std::shared_ptr<Node>& op) const override;
     bool isPrecisionPreserved(std::shared_ptr<Node> layer) const noexcept override;
 };
 

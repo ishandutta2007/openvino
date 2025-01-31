@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2023 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,11 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "itt.hpp"
+#include "openvino/util/log.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 
 #include "low_precision/common/ie_lpt_exception.hpp"
 #include "low_precision/network_helper.hpp"
-#include "itt.hpp"
 
 namespace ov {
 namespace pass {
@@ -27,22 +28,24 @@ ReluTransformation::ReluTransformation(const Params& params) : LayerTransformati
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(matcher, matcher_name);
     this->register_matcher(m, callback);
 }
 
-bool ReluTransformation::transform(TransformationContext& context, ov::pass::pattern::Matcher &m) {
+bool ReluTransformation::transform(ov::pass::pattern::Matcher &m) {
     std::shared_ptr<Node> relu = m.get_match_root();
-    if (!canBeTransformed(context, relu)) {
+    if (!canBeTransformed(relu)) {
         return false;
     }
 
     relu = NetworkHelper::separateInStandaloneBranch(relu, defaultPrecisions);
     const FakeQuantizeDequantization dequantization = NetworkHelper::getDequantization(relu, defaultPrecisions, 0);
-    moveDequantizationAfter(context, relu, dequantization, false, false);
+    const auto newOperation = moveDequantizationAfter(relu, dequantization);
+
+    OPENVINO_DEBUG("LPT: done: ", newOperation);
     return true;
 }
 
@@ -50,8 +53,8 @@ bool ReluTransformation::isPrecisionPreserved(std::shared_ptr<Node> op) const no
     return true;
 }
 
-bool ReluTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> op) const {
-    if (!LayerTransformation::canBeTransformed(context, op)) {
+bool ReluTransformation::canBeTransformed(const std::shared_ptr<Node>& op) const {
+    if (!LayerTransformation::canBeTransformed(op)) {
         return false;
     }
 

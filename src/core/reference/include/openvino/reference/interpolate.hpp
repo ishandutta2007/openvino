@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -636,7 +636,7 @@ void InterpolateEval<T>::multidim_pil_func(const T* input_data, T* out, const in
                   reinterpret_cast<char*>(transposed_in.data()),
                   m_input_data_shape,
                   sizeof(T),
-                  in_transp_axes_order.data(),
+                  in_transp_axes_order,
                   transp_input_shape);
 
         std::vector<T> transposed_out(shape_size(m_out_shape));
@@ -667,7 +667,7 @@ void InterpolateEval<T>::multidim_pil_func(const T* input_data, T* out, const in
                   reinterpret_cast<char*>(out),
                   transp_output_shape,
                   sizeof(T),
-                  out_transp_axes_order.data(),
+                  out_transp_axes_order,
                   m_out_shape);
     }
 }
@@ -711,9 +711,13 @@ inline PartialShape get_padded_input_shape(const PartialShape& input_shape,
 
     PartialShape padded_input_shape = input_shape;
 
+    auto pads_begin = attrs.pads_begin;
+    auto pads_end = attrs.pads_end;
+    pads_begin.resize(input_rank);
+    pads_end.resize(input_rank);
     for (int64_t i = 0; i < input_rank; ++i) {
         if (input_shape[i].is_static()) {
-            auto new_length = attrs.pads_begin[i] + attrs.pads_end[i] + input_shape[i].get_length();
+            auto new_length = pads_begin[i] + pads_end[i] + input_shape[i].get_length();
             padded_input_shape[i] = Dimension(new_length);
         }
     }

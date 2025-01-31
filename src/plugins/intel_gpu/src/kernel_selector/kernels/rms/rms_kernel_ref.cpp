@@ -25,11 +25,31 @@ ParamsKey RMSKernelRef::GetSupportedKey() const {
     return k;
 }
 
-KernelsData RMSKernelRef::GetKernelsData(const Params& params, const optional_params& options) const {
-    return GetCommonKernelsData(params, options);
+JitConstants RMSKernelRef::GetJitConstants(const rms_params& params, DispatchData dispatchData) const {
+    auto jit = Parent::GetJitConstants(params, dispatchData);
+
+    if (!params.fused_ops.empty()) {
+        std::vector<std::string> idx_order;
+        if (params.inputs[0].GetDims().size() == 5) {
+            idx_order = { "(b)", "(f)", "(z)", "(y)", "(x)" };
+        } else if (params.inputs[0].GetDims().size() <= 4) {
+            idx_order = { "(b)", "(f)", "(y)", "(x)" };
+        } else {
+            OPENVINO_THROW("rms_ref doesn't support 5D or higher dims.");
+        }
+
+        auto conf = FusedOpsConfiguration("", idx_order, "result", params.outputs[0].GetDType(), 1);
+        jit.Merge(MakeFusedOpsJitConstants(params, { conf }));
+    }
+
+    return jit;
 }
 
-KernelsPriority RMSKernelRef::GetKernelsPriority(const Params& /*params*/, const optional_params& /*options*/) const {
+KernelsData RMSKernelRef::GetKernelsData(const Params& params) const {
+    return GetCommonKernelsData(params);
+}
+
+KernelsPriority RMSKernelRef::GetKernelsPriority(const Params& /*params*/) const {
     return FORCE_PRIORITY_9;
 }
 }  // namespace kernel_selector

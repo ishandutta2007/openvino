@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,6 +7,7 @@
 #include "bound_evaluate.hpp"
 #include "element_visitor.hpp"
 #include "itt.hpp"
+#include "openvino/core/tensor_util.hpp"
 #include "openvino/core/validation_util.hpp"
 #include "openvino/op/constant.hpp"
 #include "openvino/op/equal.hpp"
@@ -14,20 +15,8 @@
 #include "openvino/op/select.hpp"
 #include "openvino/reference/mod.hpp"
 #include "utils.hpp"
-#include "validation_util.hpp"
 
 namespace ov {
-namespace util {
-namespace {
-Tensor make_tensor_of_value(const element::Type_t et, const int64_t value) {
-    auto c = op::v0::Constant(et, Shape{}, value);
-    auto t = Tensor(et, Shape{});
-    std::memcpy(t.data(), c.get_data_ptr(), t.get_byte_size());
-    return t;
-}
-}  // namespace
-}  // namespace util
-
 namespace op {
 namespace mod {
 struct Evaluate : ov::element::NoAction<bool> {
@@ -89,8 +78,8 @@ namespace {
  * @return Vector with inputs bounds tensors.
  */
 TensorVector get_bounds(const Node* const op) {
-    auto&& v_bounds = ov::evaluate_both_bounds(op->input_value(0));
-    auto&& m_bounds = ov::evaluate_both_bounds(op->input_value(1));
+    auto&& v_bounds = ov::util::evaluate_both_bounds(op->input_value(0));
+    auto&& m_bounds = ov::util::evaluate_both_bounds(op->input_value(1));
     return {std::move(v_bounds.first),
             std::move(v_bounds.second),
             std::move(m_bounds.first),
@@ -121,8 +110,8 @@ Tensor evaluate_undefined_result_mask(const TensorVector& bounds) {
 
     const auto& in_et = bounds.front().get_element_type();
 
-    auto zero_t = ov::util::make_tensor_of_value(in_et, 0);
-    auto max_t = ov::util::make_tensor_of_max_value(in_et);
+    const auto zero_t = ov::util::make_tensor_of_value(in_et, 0);
+    const auto max_t = ov::util::make_tensor_of_max_value(in_et);
 
     const auto& v_ub = bounds[1];
     const auto& m_lb = bounds[2];
@@ -170,7 +159,7 @@ TensorVector get_bounds_with_valid_values(const TensorVector& bounds, const Tens
 
     auto m_bounds = TensorVector();
     m_bounds.reserve(bounds.size());
-    std::transform(bounds.cbegin(), bounds.cend(), std::back_inserter(m_bounds), [&](const Tensor& b) {
+    std::transform(bounds.cbegin(), bounds.cend(), std::back_inserter(m_bounds), [&](const Tensor& b) -> ov::Tensor {
         auto tmp = TensorVector{{b.get_element_type(), mask.get_shape()}};
         return select_op.evaluate(tmp, {mask, one_t, b}) ? tmp.front() : Tensor{};
     });
@@ -216,7 +205,7 @@ bool evaluate_bound(const Node* const op, TensorVector& outputs, bool is_lower) 
         }
         // Set undefined bound value for results which cannot be calculated.
         const auto select_op = v1::Select();
-        const auto undefined_bound =
+        const auto& undefined_bound =
             is_lower ? ov::util::make_tensor_of_value(in_et, 0) : ov::util::make_tensor_of_max_value(in_et);
         return select_op.evaluate(outputs, {undefined_result_mask, undefined_bound, outputs.front()});
     } else {
@@ -244,13 +233,16 @@ bool Mod::evaluate(ov::TensorVector& outputs, const ov::TensorVector& inputs) co
 
     outputs[0].set_shape(infer_broadcast_shape(this, inputs));
     using namespace ov::element;
-    return IfTypeOf<i8, i16, i32, i64, u8, u16, u32, u64>::apply<mod::Evaluate>(inputs[0].get_element_type(),
-                                                                                inputs[0],
-                                                                                inputs[1],
-                                                                                outputs[0],
-                                                                                inputs[0].get_shape(),
-                                                                                inputs[1].get_shape(),
-                                                                                get_autob());
+    return IF_TYPE_OF(v1_Mod_evaluate,
+                      OV_PP_ET_LIST(i8, i16, i32, i64, u8, u16, u32, u64),
+                      mod::Evaluate,
+                      inputs[0].get_element_type(),
+                      inputs[0],
+                      inputs[1],
+                      outputs[0],
+                      inputs[0].get_shape(),
+                      inputs[1].get_shape(),
+                      get_autob());
 }
 
 bool Mod::evaluate_lower(TensorVector& outputs) const {

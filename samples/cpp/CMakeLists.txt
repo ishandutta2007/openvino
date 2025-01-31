@@ -1,8 +1,15 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
-cmake_minimum_required (VERSION 3.10)
+if(WIN32)
+    cmake_minimum_required (VERSION 3.15)
+    if(POLICY CMP0091)
+        cmake_policy(SET CMP0091 NEW) # Enables use of MSVC_RUNTIME_LIBRARY
+    endif()
+else()
+    cmake_minimum_required (VERSION 3.10)
+endif()
 
 # Enable CMAKE_<LANG>_COMPILER_ID AppleClang
 if(POLICY CMP0025)
@@ -12,7 +19,7 @@ endif()
 project(Samples)
 
 get_property(OV_GENERATOR_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(CMAKE_GENERATOR MATCHES "^Ninja Multi-Config$")
+if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
     # Ninja-Multi specific, see:
     # https://cmake.org/cmake/help/latest/variable/CMAKE_DEFAULT_BUILD_TYPE.html
     set(CMAKE_DEFAULT_BUILD_TYPE "Release" CACHE STRING "CMake default build type")
@@ -48,11 +55,11 @@ if (NOT BIN_FOLDER)
 endif()
 
 if(OpenVINO_SOURCE_DIR)
-    # in case if samples are built from IE repo
+    # in case if samples are built from OV repo
     set(OV_MAIN_SAMPLES_DIR "${OpenVINO_SOURCE_DIR}")
     set(OpenVINO_DIR "${CMAKE_BINARY_DIR}")
 else()
-    # in case if samples are built out of IE repo
+    # in case if samples are built out of OV repo
     set(OV_MAIN_SAMPLES_DIR ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
@@ -69,12 +76,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 
     # disable some noisy warnings
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4251 /wd4275 /wd4267 /wd4819")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
-    if(WIN32)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Qdiag-disable:177")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -diag-disable:177")
-    endif()
 endif()
 
 if(APPLE)
@@ -94,7 +95,7 @@ endif()
 ####################################
 ## to use C++11; can overwritten via cmake command line
 if(NOT DEFINED CMAKE_CXX_STANDARD)
-    set (CMAKE_CXX_STANDARD 11)
+    set (CMAKE_CXX_STANDARD 17)
     set (CMAKE_CXX_EXTENSIONS OFF)
     set (CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
@@ -108,42 +109,15 @@ endif()
 if(TARGET gflags)
     set(GFLAGS_TARGET gflags)
 elseif(gflags_required)
-    if(EXISTS /etc/debian_version)
-        set(gflags_component nothreads_static)
+    set(GFLAGS_TARGET gflags_nothreads_static)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/gflags")
+        add_subdirectory(thirdparty/gflags EXCLUDE_FROM_ALL)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/gflags")
+        # Allow running samples CMakeLists.txt as stand alone from openvino sources
+        add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/gflags"
+                            "${CMAKE_CURRENT_BINARY_DIR}/thirdparty/gflags" EXCLUDE_FROM_ALL)
     else()
-        set(gflags_component shared)
-    endif()
-    find_package(gflags QUIET OPTIONAL_COMPONENTS ${gflags_component})
-    if(gflags_FOUND)
-        if(TARGET ${GFLAGS_TARGET})
-            # nothing
-        elseif(TARGET gflags_nothreads-static)
-            # Debian 9: gflag_component is ignored
-            set(GFLAGS_TARGET gflags_nothreads-static)
-        elseif(TARGET gflags-shared)
-            # gflags shared case for CentOS / RHEL / Fedora
-            set(GFLAGS_TARGET gflags-shared)
-        elseif(TARGET gflags::gflags)
-            # gflags case for Conan
-            set(GFLAGS_TARGET gflags::gflags)
-        else()
-            message(FATAL_ERROR "Internal error: failed to find imported target 'gflags' using '${gflags_component}' component")
-        endif()
-
-        message(STATUS "gflags (${gflags_VERSION}) is found at ${gflags_DIR} using '${gflags_component}' component")
-    endif()
-
-    if(NOT gflags_FOUND)
-        set(GFLAGS_TARGET gflags_nothreads_static)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/gflags")
-            add_subdirectory(thirdparty/gflags EXCLUDE_FROM_ALL)
-        elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/gflags")
-            # Allow running samples CMakeLists.txt as stand alone from openvino sources
-            add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/gflags"
-                             "${CMAKE_CURRENT_BINARY_DIR}/thirdparty/gflags" EXCLUDE_FROM_ALL)
-        else()
-            message(FATAL_ERROR "Failed to find 'gflags' library using '${gflags_component}' component")
-        endif()
+        message(FATAL_ERROR "Failed to find 'gflags' library using '${gflags_component}' component")
     endif()
 endif()
 

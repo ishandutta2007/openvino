@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -87,16 +87,12 @@ function(ov_set_temp_directory temp_variable source_tree_dir)
     endif()
 endfunction()
 
-macro(set_temp_directory)
-    message(WARNING "'set_temp_directory' is deprecated. Please, use 'ov_set_temp_directory'")
-    ov_set_temp_directory(${ARGV})
-endmacro()
-
 #
 # For cross-compilation
 #
 
 include(cross_compile/find_commands)
+include(cross_compile/python_helpers)
 include(cross_compile/native_compile)
 
 #
@@ -183,10 +179,6 @@ else()
 endif()
 add_definitions(-DOV_BUILD_POSTFIX=\"${OV_BUILD_POSTFIX}\")
 
-# for BW compatibility; removed before 2024.0
-set(IE_BUILD_POSTFIX ${OV_BUILD_POSTFIX})
-add_definitions(-DIE_BUILD_POSTFIX=\"${IE_BUILD_POSTFIX}\")
-
 ov_set_if_not_defined(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_ROOT}/${BIN_FOLDER})
 ov_set_if_not_defined(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_ROOT}/${BIN_FOLDER})
 ov_set_if_not_defined(CMAKE_COMPILE_PDB_OUTPUT_DIRECTORY ${OUTPUT_ROOT}/${BIN_FOLDER})
@@ -211,19 +203,34 @@ set(CMAKE_POLICY_DEFAULT_CMP0025 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0026 NEW)
 # CMake 3.0+ (2.8.12): MacOS "@rpath" in target's install name
 set(CMAKE_POLICY_DEFAULT_CMP0042 NEW)
+# CMake 3.1+: Simplify variable reference and escape sequence evaluation.
+set(CMAKE_POLICY_DEFAULT_CMP0053 NEW)
 # CMake 3.9+: `RPATH` settings on macOS do not affect `install_name`.
 set(CMAKE_POLICY_DEFAULT_CMP0068 NEW)
 # CMake 3.12+: find_package() uses <PackageName>_ROOT variables.
 set(CMAKE_POLICY_DEFAULT_CMP0074 NEW)
 # CMake 3.13+: option() honors normal variables.
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-# CMake 3.15: Modules FindPython3, FindPython2 and FindPython use LOCATION for lookup strategy
+# CMake 3.15+: export(PACKAGE) does not populate package registry by default.
+set(CMAKE_POLICY_DEFAULT_CMP0090 NEW)
+# CMake 3.15+: Modules FindPython3, FindPython2 and FindPython use LOCATION for lookup strategy
 set(CMAKE_POLICY_DEFAULT_CMP0094 NEW)
 # CMake 3.19+: An imported target missing its location property fails during generation.
 set(CMAKE_POLICY_DEFAULT_CMP0111 NEW)
-# CMake 3.22+ :cmake_dependent_option() supports full Condition Syntax
+# CMake 3.22+: cmake_dependent_option() supports full Condition Syntax
 set(CMAKE_POLICY_DEFAULT_CMP0127 NEW)
+# CMake 3.24+: prefers to set the timestamps of all extracted contents to the time of the extraction
+set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
+# CMake 3.27+: Visual Studio Generators select latest Windows SDK by default.
+set(CMAKE_POLICY_DEFAULT_CMP0149 NEW)
+# CMake 3.31+: install() DESTINATION paths are normalized.
+set(CMAKE_POLICY_DEFAULT_CMP0177 NEW)
 
+set(CMAKE_FIND_USE_PACKAGE_REGISTRY OFF CACHE BOOL "Disables search in user / system package registries")
+set(CMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY ON CACHE BOOL "Disables search in user package registries")
+set(CMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY ON CACHE BOOL "Disables search in system package registries")
+set(CMAKE_EXPORT_PACKAGE_REGISTRY OFF CACHE BOOL "Disables package registry. Required for 3rd party projects like rapidjson, gflags")
+set(CMAKE_EXPORT_NO_PACKAGE_REGISTRY ON CACHE BOOL "Disables package registry. Required for 3rd party projects like rapidjson, gflags")
 set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "Don't warn about obsolete cmake versions in 3rdparty")
 set(CMAKE_WARN_ON_ABSOLUTE_INSTALL_DESTINATION ON CACHE BOOL "Warn about absolute paths in destination")
 
@@ -294,17 +301,13 @@ function(ov_mark_target_as_cc TARGET_NAME)
     add_dependencies(${TARGET_NAME} conditional_compilation_gen)
 endfunction()
 
-function(ie_mark_target_as_cc TARGET_NAME)
-    message(WARNING "This function is deprecated. Please use ov_mark_target_as_cc(TARGET_NAME) instead.")
-    ov_mark_target_as_cc(${TARGET_NAME})
-endfunction()
-
 include(python_requirements)
 
 # Code style utils
 
 include(cpplint/cpplint)
 include(clang_format/clang_format)
+include(clang_tidy/clang_tidy)
 include(ncc_naming_style/ncc_naming_style)
 
 # Restore state

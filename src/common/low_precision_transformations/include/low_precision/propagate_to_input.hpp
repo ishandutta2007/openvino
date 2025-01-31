@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -11,7 +11,7 @@
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 
 #include "low_precision/lpt_visibility.hpp"
-#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/matcher_pass.hpp"
 #include "network_helper.hpp"
 
 namespace ov {
@@ -26,18 +26,19 @@ class PropagateToInput;
 }  // namespace ov
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief PropagateToInput transformation propagates AttributeType shared value attribute instances
  * from parent output ports to consumers input ports.
  *
  * For more details about the transformation, refer to
  * [PropagateToInput](@ref openvino_docs_OV_UG_lpt_PropagateToInput) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 template <typename AttributeType>
 class ov::pass::low_precision::PropagateToInput : public ov::pass::MatcherPass {
 public:
-    PropagateToInput(const std::vector<ov::element::Type>& defaultPrecisions = { ov::element::u8, ov::element::i8 }) {
+    OPENVINO_MATCHER_PASS_RTTI("low_precision::PropagateToInput");
+    PropagateToInput(const std::vector<ov::element::Type>& defaultPrecisions = {ov::element::u8, ov::element::i8}) {
         ov::graph_rewrite_callback callback = [&](pattern::Matcher& m) {
             auto node = m.get_match_root();
             if (transformation_callback(node)) {

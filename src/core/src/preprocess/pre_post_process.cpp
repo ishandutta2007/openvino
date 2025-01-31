@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -56,6 +56,10 @@ public:
     PrePostProcessorImpl() = default;
     explicit PrePostProcessorImpl(const std::shared_ptr<ov::Model>& f) : m_function(f) {
         OPENVINO_ASSERT(f, "Model can't be nullptr for PrePostProcessor");
+
+        // if IR version < 11, set compatibility mode
+        const auto names_mode = m_function->has_rt_info("version") && m_function->get_rt_info<int64_t>("version") < 11;
+
         for (size_t i = 0; i < m_function->inputs().size(); ++i) {
             auto info = InputInfo();
             info.m_impl->m_resolved_param = m_function->get_parameters()[i];
@@ -64,6 +68,7 @@ public:
         for (size_t i = 0; i < m_function->outputs().size(); ++i) {
             auto info = OutputInfo();
             info.m_impl->m_output_node = m_function->output(i);
+            info.m_impl->get_tensor_data()->set_names_compatibility_mode(names_mode);
             m_outputs.push_back(std::move(info));
         }
     }
@@ -279,6 +284,22 @@ PreProcessSteps& PreProcessSteps::mean(const std::vector<float>& values) {
     return *this;
 }
 
+PreProcessSteps& PreProcessSteps::pad(const std::vector<int>& pads_begin,
+                                      const std::vector<int>& pads_end,
+                                      float value,
+                                      PaddingMode mode) {
+    m_impl->add_pad_impl(pads_begin, pads_end, std::vector<float>{value}, mode);
+    return *this;
+}
+
+PreProcessSteps& PreProcessSteps::pad(const std::vector<int>& pads_begin,
+                                      const std::vector<int>& pads_end,
+                                      const std::vector<float>& values,
+                                      PaddingMode mode) {
+    m_impl->add_pad_impl(pads_begin, pads_end, values, mode);
+    return *this;
+}
+
 PreProcessSteps& PreProcessSteps::convert_element_type(const element::Type& type) {
     m_impl->add_convert_impl(type);
     return *this;
@@ -361,6 +382,12 @@ OutputModelInfo& OutputModelInfo::set_layout(const Layout& layout) {
     return *this;
 }
 
+OutputModelInfo& OutputModelInfo::set_color_format(const ov::preprocess::ColorFormat& format,
+                                                   const std::vector<std::string>& sub_names) {
+    m_impl->set_color_format(format);
+    return *this;
+}
+
 // --------------------- PostProcessSteps ------------------
 
 PostProcessSteps::PostProcessSteps() : m_impl(std::unique_ptr<PostProcessStepsImpl>(new PostProcessStepsImpl())) {}
@@ -378,6 +405,11 @@ PostProcessSteps& PostProcessSteps::convert_layout(const Layout& dst_layout) {
 
 PostProcessSteps& PostProcessSteps::convert_layout(const std::vector<uint64_t>& dims) {
     m_impl->add_convert_layout_impl(dims);
+    return *this;
+}
+
+PostProcessSteps& PostProcessSteps::convert_color(const ov::preprocess::ColorFormat& dst_format) {
+    m_impl->add_convert_color_impl(dst_format);
     return *this;
 }
 

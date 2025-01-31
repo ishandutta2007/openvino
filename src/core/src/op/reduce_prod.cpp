@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,9 +7,9 @@
 #include "bound_evaluate.hpp"
 #include "element_visitor.hpp"
 #include "itt.hpp"
-#include "ngraph/validation_util.hpp"
 #include "openvino/core/shape_util.hpp"
-#include "openvino/op/util/axes_util.hpp"
+#include "openvino/core/tensor_util.hpp"
+#include "openvino/core/validation_util.hpp"
 #include "openvino/reference/reduce_prod.hpp"
 
 namespace ov {
@@ -20,7 +20,8 @@ bool has_non_negative_bounds_on_data(const Node* const op) {
     const auto& lb = op->get_input_tensor(0).get_lower_value();
     const auto& ub = op->get_input_tensor(0).get_upper_value();
 
-    return lb && ub && tensor_is_non_negative(lb) && tensor_is_non_negative(ub);
+    return lb && ub && ov::util::reduce_and(ov::util::greater_equal(lb, 0)) &&
+           ov::util::reduce_and(ov::util::greater_equal(ub, 0));
 }
 }  // namespace
 
@@ -53,14 +54,20 @@ bool ReduceProd::evaluate(TensorVector& outputs, const TensorVector& inputs) con
     OPENVINO_ASSERT(outputs.size() == 1);
     OPENVINO_ASSERT(inputs.size() == 2);
 
-    const auto reduction_axes = get_normalized_axes_from_tensor(this, inputs[1], inputs[0].get_shape().size());
+    const auto reduction_axes = ov::util::try_get_normalized_axis_set(inputs[1], inputs[0].get_shape().size(), *this);
     outputs[0].set_shape(ov::util::reduce(inputs[0].get_shape(), reduction_axes, get_keep_dims()));
 
     using namespace ov::element;
-    return IfTypeOf<f16, f32, i32, i64, u32, u64>::apply<reduce_prod::Evaluate>(inputs[0].get_element_type(),
-                                                                                inputs[0],
-                                                                                outputs[0],
-                                                                                reduction_axes);
+    return IF_TYPE_OF_CONVERT_TENSORS(v1_ReduceProd_evaluate,
+                                      this,
+                                      outputs,
+                                      inputs,
+                                      OV_PP_ET_LIST(f32, i32, i64, u32, u64),
+                                      reduce_prod::Evaluate,
+                                      inputs[0].get_element_type(),
+                                      inputs[0],
+                                      outputs[0],
+                                      reduction_axes);
 }
 
 bool ReduceProd::has_evaluate() const {
@@ -96,11 +103,9 @@ bool ReduceProd::evaluate_upper(ov::TensorVector& output_values) const {
     // In case dimensions has a zero dimension - it should return 0 in any case
     if (tensor_has_max_value(get_input_tensor(0).get_upper_value()) &&
         !tensor_has_zero_value(get_input_tensor(0).get_upper_value())) {
-        OPENVINO_SUPPRESS_DEPRECATED_START
-        auto max_constant = ngraph::get_constant_max_of_type(get_output_element_type(0));
-        OPENVINO_SUPPRESS_DEPRECATED_END
-        OPENVINO_ASSERT(max_constant->get_byte_size() <= output_values[0].get_byte_size());
-        memcpy(output_values[0].data(), max_constant->get_data_ptr(), max_constant->get_byte_size());
+        const auto max_constant = ov::util::make_tensor_of_max_value(get_output_element_type(0));
+        OPENVINO_ASSERT(max_constant.get_byte_size() <= output_values[0].get_byte_size());
+        std::memcpy(output_values[0].data(), max_constant.data(), max_constant.get_byte_size());
         return true;
     }
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -21,9 +21,7 @@ ov::op::v0::Unsqueeze::Unsqueeze(const ov::Output<ov::Node>& data, const ov::Out
 void ov::op::v0::Unsqueeze::validate_and_infer_types() {
     OV_OP_SCOPE(v0_Unsqueeze_validate_and_infer_types);
 
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    const auto input_shapes = get_node_input_partial_shapes(*this);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    const auto input_shapes = ov::util::get_node_input_partial_shapes(*this);
     const auto output_shapes = shape_infer(this, input_shapes);
 
     set_output_type(0, get_input_element_type(0), output_shapes[0]);
@@ -73,22 +71,24 @@ bool ov::op::v0::Unsqueeze::evaluate_upper(ov::TensorVector& output_values) cons
     return get_input_tensor(1).has_and_set_bound() && default_upper_bound_evaluator(this, output_values);
 }
 
-bool ov::op::v0::Unsqueeze::evaluate_label(TensorLabelVector& output_labels) const {
+bool ov::op::v0::Unsqueeze::evaluate_symbol(TensorSymbolVector& output_symbols) const {
     if (!get_input_tensor(1).has_and_set_bound())
         return false;
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    return default_label_evaluator(this, output_labels);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    return ov::util::default_symbol_evaluator(this, output_symbols);
+}
+
+bool ov::op::v0::Unsqueeze::can_constant_fold(const OutputVector& input_values) const {
+    return get_output_partial_shape(0).is_static() && !is_const_fold_disabled();
 }
 
 bool ov::op::v0::Unsqueeze::constant_fold(OutputVector& output_values, const OutputVector& inputs_values) {
-    if (get_output_partial_shape(0).is_dynamic() || is_const_fold_disabled()) {
+    if (!can_constant_fold(inputs_values)) {
         return false;
     }
 
     const auto& shape = get_output_shape(0);
 
-    if (auto data_const = std::dynamic_pointer_cast<op::v0::Constant>(inputs_values[0].get_node_shared_ptr())) {
+    if (auto data_const = ov::as_type_ptr<op::v0::Constant>(inputs_values[0].get_node_shared_ptr())) {
         output_values[0] = std::make_shared<op::v0::Constant>(*data_const, shape);
         return true;
     }

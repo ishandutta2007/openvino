@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <ngraph/pass/graph_rewrite.hpp>
+#include "openvino/pass/graph_rewrite.hpp"
 
 /*
  * Description:
@@ -74,11 +74,11 @@
 namespace ov {
 namespace intel_cpu {
 
-class ConvertFqRnnToQuantizedRnn: public ov::pass::MatcherPass {
+class ConvertFqRnnToQuantizedRnn : public ov::pass::MatcherPass {
 public:
-    OPENVINO_RTTI("ConvertFqRnnToQuantizedRnn", "0");
+    OPENVINO_MATCHER_PASS_RTTI("ConvertFqRnnToQuantizedRnn");
     ConvertFqRnnToQuantizedRnn();
 };
 
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

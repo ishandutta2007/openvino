@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -305,9 +305,7 @@ ov::Output<ov::Node> reshape_input_for_matmul(const ov::Output<ov::Node>& input_
     // if new shape is possible to compute on the shape infer stage, insert Constant node immediatelly
     // in order to prevent repeated computing during constant-folding pass
     std::shared_ptr<ov::op::v1::Reshape> reshaped_input_op;
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    if (auto new_shape_const = ov::get_constant_from_source(new_shape_op)) {
-        OPENVINO_SUPPRESS_DEPRECATED_END
+    if (auto new_shape_const = ov::util::get_constant_from_source(new_shape_op)) {
         reshaped_input_op = std::make_shared<ov::op::v1::Reshape>(input_node, new_shape_const, false);
         subgraph_nodes.insert(subgraph_nodes.end(), {new_shape_const});
     } else {
@@ -672,9 +670,7 @@ void contract_two_inputs(ov::pass::EinsumDecomposition* einsum_decompose_ptr,
         // if new shape is possible to compute on the shape infer stage, insert Constant node immediatelly
         // in order to prevent repeated computing during constant-folding pass
         std::shared_ptr<ov::op::v1::Reshape> result_op;
-        OPENVINO_SUPPRESS_DEPRECATED_START
-        if (auto new_shape_const = ov::get_constant_from_source(result_shape_op)) {
-            OPENVINO_SUPPRESS_DEPRECATED_END
+        if (auto new_shape_const = ov::util::get_constant_from_source(result_shape_op)) {
             result_op = std::make_shared<ov::op::v1::Reshape>(matmul->output(0), new_shape_const, false);
             subgraph_nodes.insert(subgraph_nodes.end(), {new_shape_const});
         } else {
@@ -706,7 +702,7 @@ ov::pass::EinsumDecomposition::EinsumDecomposition() {
     MATCHER_SCOPE(EinsumDecomposition);
     auto einsum = ov::pass::pattern::wrap_type<ov::op::v7::Einsum>();
     matcher_pass_callback callback = [this](ov::pass::pattern::Matcher& m) {
-        auto einsum_node = std::dynamic_pointer_cast<ov::op::v7::Einsum>(m.get_match_root());
+        auto einsum_node = ov::as_type_ptr<ov::op::v7::Einsum>(m.get_match_root());
         if (!einsum_node) {
             return false;
         }

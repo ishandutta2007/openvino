@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -16,7 +16,7 @@ namespace py = pybind11;
 
 void regclass_CompiledModel(py::module m) {
     py::class_<ov::CompiledModel, std::shared_ptr<ov::CompiledModel>> cls(m, "CompiledModel");
-    cls.doc() = "openvino.runtime.CompiledModel represents Model that is compiled for a specific device by applying "
+    cls.doc() = "openvino.CompiledModel represents Model that is compiled for a specific device by applying "
                 "multiple optimization transformations, then mapping to compute kernels.";
 
     cls.def(py::init([](ov::CompiledModel& other) {
@@ -40,17 +40,19 @@ void regclass_CompiledModel(py::module m) {
             The created request has allocated input and output tensors.
 
             :return: New InferRequest object.
-            :rtype: openvino.runtime.InferRequest
+            :rtype: openvino.InferRequest
         )");
 
     cls.def(
         "export_model",
         [](ov::CompiledModel& self) {
             std::stringstream _stream;
-            self.export_model(_stream);
+            {
+                py::gil_scoped_release release;
+                self.export_model(_stream);
+            }
             return py::bytes(_stream.str());
         },
-        py::call_guard<py::gil_scoped_release>(),
         R"(
             Exports the compiled model to bytes/output stream.
 
@@ -172,7 +174,17 @@ void regclass_CompiledModel(py::module m) {
                 is optimized and which kernels, element types, and layouts are selected.
 
                 :return: Model, containing Executable Graph information.
-                :rtype: openvino.runtime.Model
+                :rtype: openvino.Model
+            )");
+
+    cls.def("release_memory",
+            &ov::CompiledModel::release_memory,
+            py::call_guard<py::gil_scoped_release>(),
+            R"(
+                Release intermediate memory.
+
+                This method forces the Compiled model to release memory allocated for intermediate structures,
+                e.g. caches, tensors, temporal buffers etc., when possible
             )");
 
     cls.def_property_readonly("inputs",
@@ -181,7 +193,7 @@ void regclass_CompiledModel(py::module m) {
                                 Gets all inputs of a compiled model.
 
                                 :return: Inputs of a compiled model.
-                                :rtype: List[openvino.runtime.ConstOutput]
+                                :rtype: List[openvino.ConstOutput]
                               )");
 
     cls.def("input",
@@ -191,7 +203,7 @@ void regclass_CompiledModel(py::module m) {
                 If a model has more than one input, this method throws an exception.
 
                 :return: A compiled model input.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
     cls.def("input",
@@ -204,12 +216,12 @@ void regclass_CompiledModel(py::module m) {
                 :param index: An input index.
                 :type index: int
                 :return: A compiled model input.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
     cls.def(
         "input",
-        (const ov::Output<const ov::Node>& (ov::CompiledModel::*)(const std::string&)const) & ov::CompiledModel::input,
+        (const ov::Output<const ov::Node>& (ov::CompiledModel::*)(const std::string&) const) & ov::CompiledModel::input,
         py::arg("tensor_name"),
         R"(
                 Gets input of a compiled model identified by a tensor_name.
@@ -218,7 +230,7 @@ void regclass_CompiledModel(py::module m) {
                 :param tensor_name: An input tensor name.
                 :type tensor_name: str
                 :return: A compiled model input.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
     cls.def_property_readonly("outputs",
@@ -227,7 +239,7 @@ void regclass_CompiledModel(py::module m) {
                                 Gets all outputs of a compiled model.
 
                                 :return: Outputs of a compiled model.
-                                :rtype: List[openvino.runtime.ConstOutput]
+                                :rtype: List[openvino.ConstOutput]
                               )");
 
     cls.def("output",
@@ -237,7 +249,7 @@ void regclass_CompiledModel(py::module m) {
                 If the model has more than one output, this method throws an exception.
 
                 :return: A compiled model output.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
     cls.def("output",
@@ -250,21 +262,21 @@ void regclass_CompiledModel(py::module m) {
                 :param index: An output index.
                 :type index: int
                 :return: A compiled model output.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
-    cls.def(
-        "output",
-        (const ov::Output<const ov::Node>& (ov::CompiledModel::*)(const std::string&)const) & ov::CompiledModel::output,
-        py::arg("tensor_name"),
-        R"(
+    cls.def("output",
+            (const ov::Output<const ov::Node>& (ov::CompiledModel::*)(const std::string&) const) &
+                ov::CompiledModel::output,
+            py::arg("tensor_name"),
+            R"(
                 Gets output of a compiled model identified by a tensor_name.
                 If the output with given tensor name is not found, this method throws an exception.
 
                 :param tensor_name: An output tensor name.
                 :type tensor_name: str
                 :return: A compiled model output.
-                :rtype: openvino.runtime.ConstOutput
+                :rtype: openvino.ConstOutput
             )");
 
     cls.def("__repr__", [](const ov::CompiledModel& self) {

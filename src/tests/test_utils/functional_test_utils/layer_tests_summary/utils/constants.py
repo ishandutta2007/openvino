@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 from sys import platform
@@ -56,3 +56,16 @@ ENCODING = 'UTF-8'
 META_EXTENSION = ".meta"
 XML_EXTENSION = ".xml"
 BIN_EXTENSION = ".bin"
+
+SUPPORTED_MODEL_EXTENSION = [
+    # ONNX
+    "*.onnx",
+    #PDPD
+    "*.pdmodel",
+    # TF
+    "*.pb",
+    # OV IR
+    "*.xml",
+    # TFLITE
+    "*.tflite",
+]

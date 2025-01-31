@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -33,9 +33,10 @@ OPENVINO_API EnumNames<ov::op::PadType>& EnumNames<ov::op::PadType>::get() {
 
 template <>
 OPENVINO_API EnumNames<ov::op::RoundingType>& EnumNames<ov::op::RoundingType>::get() {
-    static auto enum_names =
-        EnumNames<ov::op::RoundingType>("ov::op::RoundingType",
-                                        {{"floor", ov::op::RoundingType::FLOOR}, {"ceil", ov::op::RoundingType::CEIL}});
+    static auto enum_names = EnumNames<ov::op::RoundingType>("ov::op::RoundingType",
+                                                             {{"floor", ov::op::RoundingType::FLOOR},
+                                                              {"ceil", ov::op::RoundingType::CEIL},
+                                                              {"ceil_torch", ov::op::RoundingType::CEIL_TORCH}});
     return enum_names;
 }
 
@@ -81,6 +82,15 @@ OPENVINO_API EnumNames<ov::op::TopKMode>& EnumNames<ov::op::TopKMode>::get() {
     static auto enum_names =
         EnumNames<ov::op::TopKMode>("ov::op::TopKMode",
                                     {{"min", ov::op::TopKMode::MIN}, {"max", ov::op::TopKMode::MAX}});
+    return enum_names;
+}
+
+template <>
+OPENVINO_API EnumNames<ov::op::PhiloxAlignment>& EnumNames<ov::op::PhiloxAlignment>::get() {
+    static auto enum_names = EnumNames<ov::op::PhiloxAlignment>("ov::op::PhiloxAlignment",
+                                                                {{"pytorch", ov::op::PhiloxAlignment::PYTORCH},
+                                                                 {"tensorflow", ov::op::PhiloxAlignment::TENSORFLOW},
+                                                                 {"mock", ov::op::PhiloxAlignment::MOCK}});
     return enum_names;
 }
 
@@ -147,6 +157,10 @@ std::ostream& op::operator<<(std::ostream& s, const ov::op::TopKSortType& type) 
 }
 
 std::ostream& op::operator<<(std::ostream& s, const ov::op::TopKMode& type) {
+    return s << as_string(type);
+}
+
+std::ostream& op::operator<<(std::ostream& s, const ov::op::PhiloxAlignment& type) {
     return s << as_string(type);
 }
 

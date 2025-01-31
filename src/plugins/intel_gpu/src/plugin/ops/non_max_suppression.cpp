@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,8 +13,7 @@
 #include "intel_gpu/primitives/non_max_suppression.hpp"
 #include "intel_gpu/runtime/debug_configuration.hpp"
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 
 static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::shared_ptr<ov::op::internal::NonMaxSuppressionIEInternal>& op) {
     cldnn::non_max_suppression::Rotation rotation = cldnn::non_max_suppression::Rotation::NONE;
@@ -53,30 +52,10 @@ static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::sh
 
     auto boxesShape = op->get_input_partial_shape(0);
     size_t num_outputs = op->get_output_size();
-
-    auto get_output_paddings = [&]() {
-        std::vector<cldnn::padding> output_paddings;
-        for (size_t i = 0; i < num_outputs; i++)
-            output_paddings.push_back(cldnn::padding());
-        return output_paddings;
-    };
-    auto get_output_data_types = [&]() {
-        std::vector<cldnn::optional_data_type> output_data_types;
-        for (size_t i = 0; i < num_outputs; i++) {
-            auto type = op->get_output_element_type(i);
-            // GPU primitive supports only i32 as output data type
-            if (type == ov::element::i64) {
-                type = ov::element::i32;
-            }
-            output_data_types.push_back(cldnn::element_type_to_data_type(type));
-        }
-        return output_data_types;
-    };
-
     if (p.use_new_shape_infer()) {
-        auto nonMaxSuppressionLayerName = layer_type_name_ID(op);
+        auto NMSLayerName = layer_type_name_ID(op);
         auto prim = cldnn::non_max_suppression(
-                nonMaxSuppressionLayerName,
+                NMSLayerName,
                 reordered_inputs[0],
                 reordered_inputs[1],
                 0,
@@ -84,8 +63,7 @@ static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::sh
                 op->m_sort_result_descending,
                 "", "", "", "", "", "", num_outputs);
 
-        prim.output_paddings = get_output_paddings();
-        prim.output_data_types = get_output_data_types();
+        prim.output_data_types = get_output_data_types(op, {{ov::element::i64, ov::element::i32}});
         prim.rotation = rotation;
 
         switch (reordered_inputs.size()) {
@@ -98,6 +76,24 @@ static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::sh
         }
 
         p.add_primitive(*op, prim);
+
+        auto NMSGatherLayerName = layer_type_name_ID(op) + "_NMSGather";
+        std::vector<cldnn::input_info> nms_gather_inputs;
+        const std::vector<cldnn::input_info> nms_gather_input_list = {
+            cldnn::input_info(NMSLayerName, 0),
+            cldnn::input_info(NMSLayerName, 1),
+            cldnn::input_info(NMSLayerName, 2)
+        };
+        for (size_t i = 0; i < num_outputs; i++) {
+            nms_gather_inputs.push_back(nms_gather_input_list[i]);
+        }
+
+        auto nms_gather_prim = cldnn::non_max_suppression_gather(
+            NMSGatherLayerName,
+            nms_gather_inputs,
+            num_outputs);
+
+        p.add_primitive(*op, nms_gather_prim);
     } else {
         auto outputIndices = op->get_output_partial_shape(0)[0].get_length();
 
@@ -153,7 +149,7 @@ static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::sh
                 op->m_sort_result_descending,
                 "", "", "", "", "", "");
 
-        prim.output_data_types = get_output_data_types();
+        prim.output_data_types = get_output_data_types(op, {{ov::element::i64, ov::element::i32}});
         prim.rotation = rotation;
 
         switch (reordered_inputs.size()) {
@@ -195,5 +191,4 @@ static void CreateNonMaxSuppressionIEInternalOp(ProgramBuilder& p, const std::sh
 
 REGISTER_FACTORY_IMPL(internal, NonMaxSuppressionIEInternal);
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu
