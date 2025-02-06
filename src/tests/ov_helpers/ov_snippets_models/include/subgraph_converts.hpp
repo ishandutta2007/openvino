@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "ngraph/ngraph.hpp"
 #include "./snippets_helpers.hpp"
 
 /* This file contains definitions of relatively simple functions (models) that will be used
@@ -26,7 +25,7 @@ public:
                              const ov::element::Type inType = ov::element::f32,
                              const ov::element::Type outType = ov::element::u8)
     : SnippetsFunctionBase(inputShapes), inType(inType), outType(outType) {
-        NGRAPH_CHECK(input_shapes.size() == 1, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(input_shapes.size() == 1, "Got invalid number of input shapes");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -49,7 +48,7 @@ public:
                                   const ov::element::Type inType = ov::element::f32,
                                   const ov::element::Type outType = ov::element::u8)
     : SnippetsFunctionBase(inputShapes), inType(inType), outType(outType) {
-        NGRAPH_CHECK(input_shapes.size() == 2, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(input_shapes.size() == 2, "Got invalid number of input shapes");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -71,7 +70,7 @@ public:
                                    const ov::element::Type inType = ov::element::f32,
                                    const ov::element::Type outType = ov::element::i8)
     : SnippetsFunctionBase(inputShapes), inType(inType), outType(outType) {
-        NGRAPH_CHECK(input_shapes.size() == 2, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(input_shapes.size() == 2, "Got invalid number of input shapes");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -82,12 +81,11 @@ protected:
 };
 
 
-/// There are 2 subgraphs: Add + Convert(Stub) and Relu
 /// Tokenized simply by starting subgraph.
 //    in1    in2           in1     in2
-//       Add                 Subgraph
-//     Convert        ->        |
-//       Relu                Subgraph
+//       Add                    |
+//     Convert        ->     Subgraph
+//       Relu                   |
 //      Result                Result
 class ConvertStubFunction : public SnippetsFunctionBase {
 public:
@@ -95,7 +93,7 @@ public:
                                  const ov::element::Type inType = ov::element::f32,
                                  const ov::element::Type outType = ov::element::i8)
         : SnippetsFunctionBase(inputShapes), inType(inType), outType(outType) {
-        NGRAPH_CHECK(input_shapes.size() == 2, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(input_shapes.size() == 2, "Got invalid number of input shapes");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -121,7 +119,7 @@ public:
                                                     const std::vector<ov::element::Type>& inTypes = {ov::element::f32},
                                                     const std::vector<ov::element::Type>& outTypes = {ov::element::f32})
     : SnippetsFunctionBase(inputShapes), inTypes(inTypes), outTypes(outTypes) {
-        NGRAPH_CHECK(input_shapes.size() == 3, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(input_shapes.size() == 3, "Got invalid number of input shapes");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -144,8 +142,8 @@ class ConvertManyOnInputsFunction : public SnippetsFunctionBase {
 public:
     explicit ConvertManyOnInputsFunction(const std::vector<ov::PartialShape>& inputShapes, const std::vector<ov::element::Type>& types)
     : SnippetsFunctionBase(inputShapes), types(types) {
-        NGRAPH_CHECK(input_shapes.size() == 1, "Got invalid number of input shapes");
-        NGRAPH_CHECK(types.size() > 1, "Got invalid number of element types");
+        OPENVINO_ASSERT(input_shapes.size() == 1, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(types.size() > 1, "Got invalid number of element types");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -167,8 +165,8 @@ class ConvertManyOnOutputsFunction : public SnippetsFunctionBase {
 public:
     explicit ConvertManyOnOutputsFunction(const std::vector<ov::PartialShape>& inputShapes, const std::vector<ov::element::Type>& types)
     : SnippetsFunctionBase(inputShapes), types(types) {
-        NGRAPH_CHECK(input_shapes.size() == 1, "Got invalid number of input shapes");
-        NGRAPH_CHECK(types.size() > 1, "Got invalid number of element types");
+        OPENVINO_ASSERT(input_shapes.size() == 1, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(types.size() > 1, "Got invalid number of element types");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;
@@ -195,9 +193,9 @@ public:
                                               const std::vector<ov::element::Type>& inTypes,
                                               const std::vector<ov::element::Type>& outTypes)
     : SnippetsFunctionBase(inputShapes), inTypes(inTypes), outTypes(outTypes) {
-        NGRAPH_CHECK(input_shapes.size() == 1, "Got invalid number of input shapes");
-        NGRAPH_CHECK(inTypes.size() > 1, "Got invalid number of input element types");
-        NGRAPH_CHECK(outTypes.size() > 0, "Got invalid number of output element types");
+        OPENVINO_ASSERT(input_shapes.size() == 1, "Got invalid number of input shapes");
+        OPENVINO_ASSERT(inTypes.size() > 1, "Got invalid number of input element types");
+        OPENVINO_ASSERT(outTypes.size() > 0, "Got invalid number of output element types");
     }
 protected:
     std::shared_ptr<ov::Model> initOriginal() const override;

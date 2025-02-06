@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 #include "low_precision/lpt_visibility.hpp"
-#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/matcher_pass.hpp"
 
 namespace ov {
 namespace pass {
@@ -20,16 +20,16 @@ class LP_TRANSFORMATIONS_API PullReshapeThroughDequantization;
 }  // namespace ov
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief PullReshapeThroughDequantization propagates dequantization operations through Reshape operations.
  * The transformation is used on constant subgraph weights to prepare a model for the next low precision transformations.
  *
  * For more details about the transformation, refer to
  * [PullReshapeThroughDequantization](@ref openvino_docs_OV_UG_lpt_PullReshapeThroughDequantization) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 class ov::pass::low_precision::PullReshapeThroughDequantization : public ov::pass::MatcherPass {
 public:
-    OPENVINO_RTTI("PullReshapeThroughDequantization", "0");
+    OPENVINO_MATCHER_PASS_RTTI("low_precision::PullReshapeThroughDequantization");
     PullReshapeThroughDequantization(const std::vector<ov::element::Type>& inputPrecisions = {});
 };

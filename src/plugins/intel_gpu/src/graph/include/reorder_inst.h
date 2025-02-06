@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -103,12 +103,8 @@ public:
         return req_reinterpr;
     }
 
-    void save(cldnn::BinaryOutputBuffer& ob) const override;
-    void load(cldnn::BinaryInputBuffer& ib) override;
-
 private:
     void on_execute() override;
-    void reuse_input();
 
     bool _req_reinterpr = false;
 };

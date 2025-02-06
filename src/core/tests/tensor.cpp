@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -10,15 +10,14 @@
 
 #include "common_test_utils/test_tools.hpp"
 #include "gtest/gtest.h"
-#include "ngraph/runtime/host_tensor.hpp"
 #include "openvino/core/model.hpp"
 #include "openvino/op/parameter.hpp"
 #include "openvino/op/relu.hpp"
-#include "tensor_conversion_util.hpp"
 
 using namespace std;
-using namespace ov;
 
+namespace ov {
+namespace test {
 TEST(tensor, tensor_names) {
     auto arg0 = make_shared<ov::op::v0::Parameter>(element::f32, Shape{1});
     arg0->set_friendly_name("data");
@@ -35,20 +34,59 @@ TEST(tensor, tensor_names) {
     ASSERT_EQ(f0->get_result()->input_value(0).get_tensor().get_names(), relu->get_output_tensor(0).get_names());
 }
 
-TEST(tensor, wrap_tensor_with_unspecified_type) {
-    auto param = std::make_shared<ov::op::v0::Parameter>(element::undefined, ov::PartialShape{});
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    auto tensor = ov::util::wrap_tensor(param->output(0));
-    OPENVINO_SUPPRESS_DEPRECATED_END
-    // !tensor means that the tensor is not initialized
-    EXPECT_EQ(!tensor, true);
+TEST(tensor, create_tensor_with_zero_dims_check_stride) {
+    ov::Shape shape = {0, 0, 0, 0};
+    auto tensor = ov::Tensor(element::f32, shape);
+    EXPECT_EQ(!!tensor, true);
+    auto stride = tensor.get_strides();
+    EXPECT_EQ(stride.size(), shape.size());
+    EXPECT_EQ(stride.back(), 0);
+    EXPECT_EQ(tensor.is_continuous(), true);
 }
 
-TEST(tensor, wrap_tensor_with_unspecified_type_from_host_tensor) {
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    auto host_tensor = std::make_shared<ngraph::runtime::HostTensor>(element::undefined, ov::PartialShape{});
-    auto tensor = ov::util::wrap_tensor(host_tensor);
-    OPENVINO_SUPPRESS_DEPRECATED_END
-    // !tensor means that the tensor is not initialized
-    EXPECT_EQ(!tensor, true);
+TEST(tensor, get_byte_size_u2_less_than_min_storage_unit) {
+    const auto tensor = Tensor(element::u2, Shape{3});
+    EXPECT_EQ(tensor.get_byte_size(), 1);
 }
+
+TEST(tensor, get_byte_size_u2_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u2, Shape{16});
+    EXPECT_EQ(tensor.get_byte_size(), 4);
+}
+
+TEST(tensor, get_byte_size_u2_not_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u2, Shape{17});
+    EXPECT_EQ(tensor.get_byte_size(), 5);
+}
+
+TEST(tensor, get_byte_size_u3_less_than_min_storage_unit) {
+    const auto tensor = Tensor(element::u3, Shape{3});
+    EXPECT_EQ(tensor.get_byte_size(), 3);
+}
+
+TEST(tensor, get_byte_size_u3_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u3, Shape{16});
+    EXPECT_EQ(tensor.get_byte_size(), 2 * 3);
+}
+
+TEST(tensor, get_byte_size_u3_not_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u3, Shape{17});
+    EXPECT_EQ(tensor.get_byte_size(), 3 + 2 * 3);
+}
+
+TEST(tensor, get_byte_size_u6_less_than_min_storage_unit) {
+    const auto tensor = Tensor(element::u6, Shape{3});
+    EXPECT_EQ(tensor.get_byte_size(), 3);
+}
+
+TEST(tensor, get_byte_size_u6_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u6, Shape{16});
+    EXPECT_EQ(tensor.get_byte_size(), 4 * 3);
+}
+
+TEST(tensor, get_byte_size_u6_not_even_div_by_storage_unit) {
+    const auto tensor = Tensor(element::u6, Shape{17});
+    EXPECT_EQ(tensor.get_byte_size(), 3 + 4 * 3);
+}
+}  // namespace test
+}  // namespace ov

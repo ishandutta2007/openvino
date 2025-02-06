@@ -1,50 +1,62 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
 cmake_policy(SET CMP0054 NEW)
 
-# TODO: fix it, outside of source dir MO cannot find TBB dependency
 ov_set_temp_directory(TEMP "${CMAKE_SOURCE_DIR}")
 
 ## Intel OMP package
 if(THREADING STREQUAL "OMP")
-    reset_deps_cache(OMP)
-    if(WIN32 AND X86_64)
-        RESOLVE_DEPENDENCY(OMP
-                ARCHIVE_WIN "iomp.zip"
-                TARGET_PATH "${TEMP}/omp"
-                ENVIRONMENT "OMP"
-                VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
-                SHA256 "62c68646747fb10f19b53217cb04a1e10ff93606f992e6b35eb8c31187c68fbf"
-                USE_NEW_LOCATION TRUE)
-    elseif(LINUX AND X86_64)
-        RESOLVE_DEPENDENCY(OMP
-                ARCHIVE_LIN "iomp.tgz"
-                TARGET_PATH "${TEMP}/omp"
-                ENVIRONMENT "OMP"
-                VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
-                SHA256 "7832b16d82513ee880d97c27c7626f9525ebd678decf6a8fe6c38550f73227d9"
-                USE_NEW_LOCATION TRUE)
-    elseif(APPLE AND X86_64)
-        RESOLVE_DEPENDENCY(OMP
-                ARCHIVE_MAC "iomp_20190130_mac.tgz"
-                TARGET_PATH "${TEMP}/omp"
-                ENVIRONMENT "OMP"
-                VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
-                SHA256 "591ea4a7e08bbe0062648916f42bded71d24c27f00af30a8f31a29b5878ea0cc"
-                USE_NEW_LOCATION TRUE)
-    else()
-        message(FATAL_ERROR "Intel OMP is not available on current platform")
-    endif()
-    update_deps_cache(OMP "${OMP}" "Path to OMP root folder")
-    debug_message(STATUS "intel_omp=" ${OMP})
+    # check whether the compiler supports OpenMP at all
+    find_package(OpenMP)
 
-    ov_cpack_add_component(omp HIDDEN)
-    file(GLOB_RECURSE source_list "${OMP}/*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
-    install(FILES ${source_list}
-            DESTINATION ${OV_CPACK_RUNTIMEDIR}
-            COMPONENT omp)
+    if(NOT OpenMP_CXX_FOUND)
+        message(WARNING "Compiler does not support OpenMP standard. Falling back to SEQ threading")
+        set(THREADING "SEQ")
+        set(ENABLE_INTEL_OPENMP OFF)
+    endif()
+
+    if(ENABLE_INTEL_OPENMP)
+        reset_deps_cache(OMP)
+        if(WIN32 AND X86_64)
+            RESOLVE_DEPENDENCY(INTEL_OMP
+                    ARCHIVE_WIN "iomp.zip"
+                    TARGET_PATH "${TEMP}/omp"
+                    ENVIRONMENT "INTEL_OMP"
+                    VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
+                    SHA256 "62c68646747fb10f19b53217cb04a1e10ff93606f992e6b35eb8c31187c68fbf"
+                    USE_NEW_LOCATION TRUE)
+        elseif(LINUX AND X86_64 AND OPENVINO_GNU_LIBC)
+            RESOLVE_DEPENDENCY(INTEL_OMP
+                    ARCHIVE_LIN "iomp.tgz"
+                    TARGET_PATH "${TEMP}/omp"
+                    ENVIRONMENT "INTEL_OMP"
+                    VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
+                    SHA256 "7832b16d82513ee880d97c27c7626f9525ebd678decf6a8fe6c38550f73227d9"
+                    USE_NEW_LOCATION TRUE)
+        elseif(APPLE AND X86_64)
+            RESOLVE_DEPENDENCY(INTEL_OMP
+                    ARCHIVE_MAC "iomp_20190130_mac.tgz"
+                    TARGET_PATH "${TEMP}/omp"
+                    ENVIRONMENT "INTEL_OMP"
+                    VERSION_REGEX ".*_([a-z]*_([a-z0-9]+\\.)*[0-9]+).*"
+                    SHA256 "591ea4a7e08bbe0062648916f42bded71d24c27f00af30a8f31a29b5878ea0cc"
+                    USE_NEW_LOCATION TRUE)
+        endif()
+
+        if(INTEL_OMP)
+            update_deps_cache(INTEL_OMP "${INTEL_OMP}" "Path to OMP root folder")
+            debug_message(STATUS "intel_omp=" ${INTEL_OMP})
+
+            ov_cpack_add_component(omp HIDDEN)
+            file(GLOB_RECURSE source_list "${INTEL_OMP}/*${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+            install(FILES ${source_list}
+                    DESTINATION ${OV_CPACK_RUNTIMEDIR}
+                    COMPONENT intel_omp
+                    ${OV_CPACK_COMP_OPENMP_EXCLUDE_ALL})
+        endif()
+    endif()
 endif()
 
 ## TBB package
@@ -89,10 +101,10 @@ function(ov_download_tbb)
         # TODO: add target_path to be platform specific as well, to avoid following if
         # build oneTBB 2021.2.1 with Visual Studio 2019 (MSVC 14.21)
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_WIN "oneapi-tbb-2021.2.2-win.zip"
+                ARCHIVE_WIN "oneapi-tbb-2021.2.5-win-trim-cfg-simplify.zip"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "103b19a8af288c6a7d83ed3f0d2239c4afd0dd189fc12aad1d34b3c9e78df94b"
+                SHA256 "63bf0992406d69dfb3c402f46466face2388ca55b6678f29072ba304f3622fe7"
                 USE_NEW_LOCATION TRUE)
     elseif(ANDROID AND X86_64)
         RESOLVE_DEPENDENCY(TBB
@@ -101,13 +113,13 @@ function(ov_download_tbb)
                 ENVIRONMENT "TBBROOT"
                 SHA256 "f42d084224cc2d643314bd483ad180b081774608844000f132859fca3e9bf0ce"
                 USE_NEW_LOCATION TRUE)
-    elseif(LINUX AND X86_64 AND OV_GLIBC_VERSION VERSION_GREATER_EQUAL 2.17)
+    elseif(LINUX AND X86_64 AND OPENVINO_GNU_LIBC AND OV_LIBC_VERSION VERSION_GREATER_EQUAL 2.17)
         # build oneTBB 2021.2.1 with gcc 4.8 (glibc 2.17)
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_LIN "oneapi-tbb-2021.2.3-lin-20231012.tgz"
+                ARCHIVE_LIN "oneapi-tbb-2021.13.0-lin-release.tgz"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "6f39d18783b37fdcc15ca137fbf70bc78206848af1a510cada806279fae49718"
+                SHA256 "fd2e889323cd5458be750eefdc026ce6791c723fae60b146c2511a5caeaf01c5"
                 USE_NEW_LOCATION TRUE)
     elseif(YOCTO_AARCH64)
         RESOLVE_DEPENDENCY(TBB
@@ -119,34 +131,34 @@ function(ov_download_tbb)
     elseif(APPLE AND X86_64)
         # build oneTBB 2021.2.1 with OS version 11.4
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_MAC "oneapi-tbb-2021.2.1-mac.tgz"
+                ARCHIVE_MAC "oneapi-tbb-2021.13.0-mac.tgz"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "c57ce4b97116cd3093c33e6dcc147fb1bbb9678d0ee6c61a506b2bfe773232cb"
+                SHA256 "86e07127bfead5c4aad456c765de845013502342bda33d249d8097ed57afe945"
                 USE_NEW_LOCATION TRUE)
     elseif(WIN32 AND AARCH64)
         # build oneTBB 2021.2.1 with Visual Studio 2022 (MSVC 14.35)
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_WIN "oneapi-tbb-2021.2.1-win-arm64.zip"
+                ARCHIVE_WIN "oneapi-tbb-2021.2.5-win-arm64-trim.zip"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "09fe7f5e7be589aa34ccd20fdfd7cad9e0afa89d1e74ecdb008a75d0af71d6e1"
+                SHA256 "c26b7593e1808c2dd15a768cd4ea1ee14aa0aa2dacb210b86e326ab7960d2473"
                 USE_NEW_LOCATION TRUE)
-    elseif(LINUX AND AARCH64 AND OV_GLIBC_VERSION VERSION_GREATER_EQUAL 2.17)
-        # build oneTBB 2021.2.1 with gcc 4.8 (glibc 2.17)
+    elseif(LINUX AND AARCH64 AND OPENVINO_GNU_LIBC AND OV_LIBC_VERSION VERSION_GREATER_EQUAL 2.17)
+        # build oneTBB with glibc 2.17
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_LIN "oneapi-tbb-2021.2.1-lin-arm64-20231012.tgz"
+                ARCHIVE_LIN "oneapi-tbb-2021.13.0-lin-arm64-release.tgz"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "cbb239cbda7ea2937cec7008c12fe628dd44488e1eafd9630f8814f9eb2c13e2"
+                SHA256 "6e1106735714600474440c134df25b40a225d40b44c2102d7ff23e0482834faa"
                 USE_NEW_LOCATION TRUE)
     elseif(APPLE AND AARCH64)
-        # build oneTBB 2021.2.1 with export MACOSX_DEPLOYMENT_TARGET=11.0
+        # build oneTBB with export MACOSX_DEPLOYMENT_TARGET=11.0
         RESOLVE_DEPENDENCY(TBB
-                ARCHIVE_MAC "oneapi-tbb-2021.2.1-mac-arm64-canary.tgz"
+                ARCHIVE_MAC "oneapi-tbb-2021.13.0-mac-arm64-release.tgz"
                 TARGET_PATH "${TEMP}/tbb"
                 ENVIRONMENT "TBBROOT"
-                SHA256 "60b7ffa73797b173187a7b0ca883c64d7e4e8f24824c0ff233c1ee90e9000317"
+                SHA256 "de9893f8699c15b1c8b46daa7fc51e112e84353d66d5baf1c35574932747c64c"
                 USE_NEW_LOCATION TRUE)
     else()
         message(WARNING "Prebuilt TBB is not available on current platform")
@@ -158,6 +170,7 @@ function(ov_download_tbb)
         update_deps_cache(TBB_DIR "${TBBROOT}/lib/cmake/TBB" "Path to TBB cmake folder")
     elseif(EXISTS "${TBBROOT}/lib/cmake/tbb/TBBConfig.cmake")
         # oneTBB release package version less than 2021.6.0
+        # or TBB from oneAPI package
         update_deps_cache(TBB_DIR "${TBBROOT}/lib/cmake/tbb" "Path to TBB cmake folder")
     elseif(EXISTS "${TBBROOT}/lib64/cmake/TBB/TBBConfig.cmake")
         # 64-bits oneTBB case
@@ -202,7 +215,7 @@ function(ov_download_tbbbind_2_5)
                 ENVIRONMENT "TBBBIND_2_5_ROOT"
                 SHA256 "49ae93b13a13953842ff9ae8d01681b269b5b0bc205daf18619ea9a828c44bee"
                 USE_NEW_LOCATION TRUE)
-    elseif(LINUX AND X86_64)
+    elseif(LINUX AND X86_64 AND OPENVINO_GNU_LIBC AND OV_LIBC_VERSION VERSION_GREATER_EQUAL 2.17)
         RESOLVE_DEPENDENCY(TBBBIND_2_5
                 ARCHIVE_LIN "tbbbind_2_5_static_lin_v4.tgz"
                 TARGET_PATH "${TEMP}/tbbbind_2_5"
@@ -221,47 +234,3 @@ Build oneTBB from sources and set TBBROOT environment var before OpenVINO cmake 
     update_deps_cache(TBBBIND_2_5_ROOT "${TBBBIND_2_5}" "Path to TBBBIND_2_5 root folder")
     update_deps_cache(TBBBIND_2_5_DIR "${TBBBIND_2_5}/cmake" "Path to TBBBIND_2_5 cmake folder")
 endfunction()
-
-if(ENABLE_INTEL_GNA)
-    reset_deps_cache(
-            GNA_EXT_DIR
-            GNA_PLATFORM_DIR
-            GNA_KERNEL_LIB_NAME
-            GNA_LIBS_LIST
-            GNA_LIB_DIR
-            libGNA_INCLUDE_DIRS
-            libGNA_LIBRARIES_BASE_PATH)
-        set(GNA_VERSION "03.05.00.2116")
-        set(GNA_HASH "960350567702bda17276ac4c060d7524fb7ce7ced785004bd861c81ff2bfe2c5")
-
-        set(FILES_TO_EXTRACT_LIST gna_${GNA_VERSION}/include)
-        if(WIN32)
-            LIST(APPEND FILES_TO_EXTRACT_LIST gna_${GNA_VERSION}/win64)
-        else()
-            LIST(APPEND FILES_TO_EXTRACT_LIST gna_${GNA_VERSION}/linux)
-        endif()
-
-        RESOLVE_DEPENDENCY(GNA_EXT_DIR
-                ARCHIVE_UNIFIED "gna/gna_${GNA_VERSION}.zip"
-                TARGET_PATH "${TEMP}/gna_${GNA_VERSION}"
-                VERSION_REGEX ".*_([0-9]+.[0-9]+.[0-9]+.[0-9]+).*"
-                FILES_TO_EXTRACT FILES_TO_EXTRACT_LIST
-                SHA256 ${GNA_HASH}
-                USE_NEW_LOCATION TRUE)
-    update_deps_cache(GNA_EXT_DIR "${GNA_EXT_DIR}" "Path to GNA root folder")
-    debug_message(STATUS "gna=" ${GNA_EXT_DIR})
-
-    if (WIN32)
-        set(GNA_PLATFORM_DIR win64 CACHE STRING "" FORCE)
-    elseif (UNIX)
-        set(GNA_PLATFORM_DIR linux CACHE STRING "" FORCE)
-    else ()
-        message(FATAL_ERROR "GNA not supported on this platform, only linux, and windows")
-    endif ()
-    set(GNA_LIB_DIR x64 CACHE STRING "" FORCE)
-    set(GNA_PATH ${GNA_EXT_DIR}/${GNA_PLATFORM_DIR}/${GNA_LIB_DIR} CACHE STRING "" FORCE)
-
-    if(NOT BUILD_SHARED_LIBS)
-        list(APPEND PATH_VARS "GNA_PATH")
-    endif()
-endif()

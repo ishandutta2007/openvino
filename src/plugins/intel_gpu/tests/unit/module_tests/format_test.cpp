@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -112,40 +112,41 @@ public:
         ASSERT_EQ(blocks.at(idx).first, param.inner_block.at(idx).first);
         ASSERT_EQ(blocks.at(idx).second, param.inner_block.at(idx).second);
     }
+
+    auto logic_blocks = format::logic_block_sizes(param.in_format);
+    ASSERT_EQ(logic_blocks.size(), param.inner_block.size());
+    for (size_t idx = 0; idx < logic_blocks.size(); idx++) {
+        auto c = param.in_format.internal_order()[param.inner_block.at(idx).first];
+        auto pos = param.in_format.order().find(c);
+        if (pos == std::string::npos)
+            throw std::domain_error(std::string("Unknown coord type: ") + c);
+
+        auto expected_logic_idx = param.in_format.dims_order()[pos];
+        auto expected_logic_size = param.inner_block.at(idx).second;
+
+        ASSERT_EQ(logic_blocks.at(idx).first, expected_logic_idx);
+        ASSERT_EQ(logic_blocks.at(idx).second, expected_logic_size);
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(smoke, axes_test_format,
     testing::ValuesIn(std::vector<axes_test_format_params>{
         {format::os_is_yx_isa8_osv8_isv4,       {{1, 8}, {0, 8}, {1, 4}}, {{1, 32}, {0, 8}}},
         {format::os_is_yx_isa8_osv16_isv4,      {{1, 8}, {0, 16}, {1, 4}}, {{1, 32}, {0, 16}}},
-        {format::os_is_yx_osa4_isa8_osv8_isv2,  {{0, 4}, {1, 8}, {0, 8}, {1, 2}}, {{0, 32}, {1, 16}}},
         {format::os_is_yx_osa4_isa8_osv8_isv4,  {{0, 4}, {1, 8}, {0, 8}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::os_is_zyx_osa4_isa8_osv8_isv2, {{0, 4}, {1, 8}, {0, 8}, {1, 2}}, {{0, 32}, {1, 16}}},
         {format::os_is_zyx_osa4_isa8_osv8_isv4, {{0, 4}, {1, 8}, {0, 8}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::os_is_yx_osa2_isa8_osv16_isv2, {{0, 2}, {1, 8}, {0, 16}, {1, 2}}, {{0, 32}, {1, 16}}},
-        {format::os_is_yx_osa2_isa8_osv16_isv4, {{0, 2}, {1, 8}, {0, 16}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::os_is_yx_osa2_isa8_osv8_isv2,  {{0, 2}, {1, 8}, {0, 8}, {1, 2}}, {{0, 16}, {1, 16}}},
-        {format::os_is_zyx_osa2_isa8_osv8_isv2, {{0, 2}, {1, 8}, {0, 8}, {1, 2}}, {{0, 16}, {1, 16}}},
         {format::os_is_zyx_isa8_osv8_isv4,      {{1, 8}, {0, 8}, {1, 4}}, {{1, 32}, {0, 8}}},
         {format::os_is_zyx_isa8_osv16_isv4,     {{1, 8}, {0, 16}, {1, 4}}, {{1, 32}, {0, 16}}},
-        {format::is_os_yx_osa4_isa8_osv8_isv4,  {{0, 4}, {1, 8}, {0, 8}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::is_os_yx_isa2_osa8_isv8_osv2,  {{1, 2}, {0, 8}, {1, 8}, {0, 2}}, {{1, 16}, {0, 16}}},
-        {format::is_os_yx_isa4_osa8_isv8_osv4,  {{1, 4}, {0, 8}, {1, 8}, {0, 4}}, {{1, 32}, {0, 32}}},
         {format::os_is_yx_osv8_isv4,            {{0, 8}, {1, 4}}, {{0, 8}, {1, 4}}},
-        {format::os_is_zyx_osv8_isv4,           {{0, 8}, {1, 4}}, {{0, 8}, {1, 4}}},
-        {format::os_is_yx_osv8_isv2,            {{0, 8}, {1, 2}}, {{0, 8}, {1, 2}}},
-        {format::os_is_zyx_osv8_isv2,           {{0, 8}, {1, 2}}, {{0, 8}, {1, 2}}},
-        {format::g_os_is_yx_osa2_isa8_osv8_isv2,  {{0, 2}, {1, 8}, {0, 8}, {1, 2}}, {{0, 16}, {1, 16}}},
-        {format::g_os_is_yx_osa4_isa8_osv8_isv4,  {{0, 4}, {1, 8}, {0, 8}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::g_os_is_zyx_osa4_isa8_osv8_isv4, {{0, 4}, {1, 8}, {0, 8}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::g_os_is_yx_osa4_isa8_osv8_isv2,  {{0, 4}, {1, 8}, {0, 8}, {1, 2}}, {{0, 32}, {1, 16}}},
-        {format::g_os_is_zyx_osa4_isa8_osv8_isv2, {{0, 4}, {1, 8}, {0, 8}, {1, 2}}, {{0, 32}, {1, 16}}},
-        {format::g_os_is_yx_osa2_isa8_osv16_isv4, {{0, 2}, {1, 8}, {0, 16}, {1, 4}}, {{0, 32}, {1, 32}}},
-        {format::g_os_is_yx_osa2_isa8_osv16_isv2, {{0, 2}, {1, 8}, {0, 16}, {1, 2}}, {{0, 32}, {1, 16}}},
         {format::gs_oiyx_gsv32,                   {{8, 32}}, {{8, 32}}},
-        {format::gs_oizyx_gsv32,                  {{8, 32}}, {{8, 32}}},
         {format::gs_oiyx_gsv16,                   {{8, 16}}, {{8, 16}}},
         {format::gs_oizyx_gsv16,                  {{8, 16}}, {{8, 16}}},
+        {format::i_yxs_os_yxsv2_osv16,            {{0, 16}}, {{0, 16}}},
+        {format::iy_xs_os_xsv2_osv8__ao32,        {{2, 2}, {0, 8}},   {{2, 2}, {0, 8}}},
+        {format::g_is_os_zyx_isv16_osv16,         {{1, 16}, {0, 16}}, {{1, 16}, {0, 16}}},
+        {format::g_is_os_yx_isv16_osv16,          {{1, 16}, {0, 16}}, {{1, 16}, {0, 16}}},
+        {format::gi_yxs_os_yxsv2_osv16,           {{0, 16}},          {{0, 16}}},
+        {format::giy_xs_os_xsv2_osv8__ao32,       {{2, 2}, {0, 8}},   {{2, 2}, {0, 8}}},
     }),
     axes_test_format::PrintToString);
 
@@ -224,7 +225,6 @@ INSTANTIATE_TEST_SUITE_P(smoke, find_format_test,
         {{2, 3, 1, 0},          {},                       true,      false,     false,      false,      false,    format::yxio},
         {{0, 1, 2, 3},          {{0, 16}},                true,      false,     false,      false,      false,    format::os_iyx_osv16},
         {{0, 1, 2, 3},          {},                       true,      false,     false,      true,       false,    format::winograd_2x3_s1_weights},
-        {{0, 1, 3, 2},          {},                       true,      false,     false,      false,      false,    format::lstm_weights_dio},
         {{0, 1, 2, 3},          {{1, 8}, {0, 8}, {1, 4}}, true,      false,     false,      false,      false,    format::os_is_yx_isa8_osv8_isv4},
         {{0, 1, 2, 3, 4},       {},                       true,      true,      false,      false,      false,    format::goiyx},
         {{0, 2, 1, 3, 4},       {{1, 16}, {0, 16}},       true,      true,      false,      false,      false,    format::g_is_os_yx_isv16_osv16},

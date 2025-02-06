@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -10,15 +10,15 @@
 #include <cmath>
 #include <vector>
 
+#include "itt.hpp"
+#include "openvino/util/log.hpp"
+#include "openvino/opsets/opset6.hpp"
 #include "openvino/pass/pattern/op/or.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
-
 #include "openvino/core/type/element_type.hpp"
 #include "openvino/core/type/element_type_traits.hpp"
-#include "low_precision/network_helper.hpp"
 
-#include "openvino/opsets/opset6.hpp"
-#include "itt.hpp"
+#include "low_precision/network_helper.hpp"
 
 using namespace ov;
 using namespace ov::pass;
@@ -27,7 +27,7 @@ using namespace ov::pass::low_precision;
 namespace mvn {
 
 template<typename T>
-std::shared_ptr<ov::op::v0::Constant> createNewScalesConst(const ov::op::v0::Constant& originalConst) {
+std::shared_ptr<ov::op::v0::Constant> createNewScalesConst(const ov::op::v0::Constant& originalConst, const ov::element::Type& precision) {
     std::vector<T> source = originalConst.cast_vector<T>();
 
     std::vector<T> newData(source.size());
@@ -35,8 +35,7 @@ std::shared_ptr<ov::op::v0::Constant> createNewScalesConst(const ov::op::v0::Con
         newData[i] = source[i] < 0 ? T{-1} : T{1};
     }
 
-    const ov::element::Type type = originalConst.get_output_element_type(0);
-    return ov::op::v0::Constant::create(type, originalConst.get_shape(), newData);
+    return ov::op::v0::Constant::create(precision, originalConst.get_shape(), newData);
 }
 
 } // namespace mvn
@@ -53,15 +52,15 @@ MVNTransformation::MVNTransformation(const Params& params) : LayerTransformation
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(matcher, matcher_name);
     this->register_matcher(m, callback);
 }
 
-bool MVNTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> operation) const {
-    if (!LayerTransformation::canBeTransformed(context, operation)) {
+bool MVNTransformation::canBeTransformed(const std::shared_ptr<Node>& operation) const {
+    if (!LayerTransformation::canBeTransformed(operation)) {
         return false;
     }
 
@@ -118,17 +117,13 @@ bool MVNTransformation::canBeTransformed(const TransformationContext& context, s
     return false;
 }
 
-bool MVNTransformation::transform(TransformationContext &context, ov::pass::pattern::Matcher &m) {
+bool MVNTransformation::transform(ov::pass::pattern::Matcher &m) {
     std::shared_ptr<Node> operation = m.get_match_root();
-    if (!canBeTransformed(context, operation)) {
+    if (!canBeTransformed(operation)) {
         return false;
     }
 
-    std::shared_ptr<Node> mvn = ov::as_type_ptr<op::v0::MVN>(operation);
-    if (!mvn) {
-        mvn = ov::as_type_ptr<opset6::MVN>(operation);
-    }
-
+    const auto mvn = NetworkHelper::separateInStandaloneBranch(operation, defaultPrecisions);
     bool normalizeVariance;
     if (ov::is_type<op::v0::MVN>(mvn)) {
         normalizeVariance = ov::as_type_ptr<op::v0::MVN>(mvn)->get_normalize_variance();
@@ -138,21 +133,20 @@ bool MVNTransformation::transform(TransformationContext &context, ov::pass::patt
 
     FakeQuantizeDequantization dequantization = NetworkHelper::getDequantization(mvn, defaultPrecisions);
     const auto scalesConst = dequantization.multiplyConstant;
-    const auto type = scalesConst->get_element_type();
 
     auto newScalesConst = scalesConst;
     if (normalizeVariance) {
-        switch (type) {
+        switch (deqPrecision) {
             case ov::element::Type_t::f16: {
-                newScalesConst = mvn::createNewScalesConst<ov::element_type_traits<ov::element::Type_t::f16>::value_type>(*scalesConst);
+                newScalesConst = mvn::createNewScalesConst<ov::element_type_traits<ov::element::Type_t::f16>::value_type>(*scalesConst, deqPrecision);
                 break;
             }
             case ov::element::Type_t::f32: {
-                newScalesConst = mvn::createNewScalesConst<ov::element_type_traits<ov::element::Type_t::f32>::value_type>(*scalesConst);
+                newScalesConst = mvn::createNewScalesConst<ov::element_type_traits<ov::element::Type_t::f32>::value_type>(*scalesConst, deqPrecision);
                 break;
             }
             default: {
-                THROW_TRANSFORMATION_EXCEPTION << "unexpected element type " << type;
+                THROW_TRANSFORMATION_EXCEPTION << "unexpected element type " << deqPrecision;
             }
         }
     }
@@ -173,7 +167,9 @@ bool MVNTransformation::transform(TransformationContext &context, ov::pass::patt
 
     NetworkHelper::insertDequantizationAfter(mvn, newMultiply, newMVN);
 
-    updateOutput(context, newMultiply, newMVN);
+    updateOutput(newMultiply, newMVN);
+
+    OPENVINO_DEBUG("LPT: done: ", newMVN);
     return true;
 }
 

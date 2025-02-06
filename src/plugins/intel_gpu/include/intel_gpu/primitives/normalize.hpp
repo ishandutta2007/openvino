@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -41,9 +41,8 @@ struct normalize : public primitive_base<normalize> {
               const input_info& input,
               const primitive_id& scale_input,
               const bool across_spatial = true,
-              const float epsilon = 1e-10f,
-              const padding& output_padding = padding())
-        : primitive_base(id, {input}, {output_padding}),
+              const float epsilon = 1e-10f)
+        : primitive_base(id, {input}),
           scale_input(scale_input),
           across_spatial(across_spatial),
           epsilon(epsilon) {}
@@ -89,6 +88,6 @@ struct normalize : public primitive_base<normalize> {
     }
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override { return {scale_input}; }
+    std::vector<input_info> get_dependencies() const override { return {scale_input}; }
 };
 }  // namespace cldnn

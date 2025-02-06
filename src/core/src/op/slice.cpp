@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,6 +6,7 @@
 
 #include "bound_evaluate.hpp"
 #include "itt.hpp"
+#include "openvino/core/validation_util.hpp"
 #include "openvino/reference/slice.hpp"
 #include "slice_shape_inference.hpp"
 
@@ -66,9 +67,7 @@ void Slice::validate_and_infer_types() {
         }
     }
 
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    const auto input_shapes = get_node_input_partial_shapes(*this);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    const auto input_shapes = ov::util::get_node_input_partial_shapes(*this);
     const auto output_shapes = shape_infer(this, input_shapes);
 
     set_input_is_relevant_to_shape(0);
@@ -126,7 +125,7 @@ bool Slice::evaluate(TensorVector& outputs, const TensorVector& inputs) const {
 
     const auto starts = ov::get_tensor_data_as<int64_t>(inputs[1]);
     const auto steps = ov::get_tensor_data_as<int64_t>(inputs[3]);
-    const auto axes = slice_no_axes(this) ? default_axes(starts.size()) : ov::get_tensor_data_as<int64_t>(inputs[4]);
+    const auto& axes = slice_no_axes(this) ? default_axes(starts.size()) : ov::get_tensor_data_as<int64_t>(inputs[4]);
 
     reference::slice(static_cast<const char*>(inputs[0].data()),
                      inputs[0].get_shape(),
@@ -147,10 +146,8 @@ bool Slice::evaluate_upper(ov::TensorVector& output_values) const {
     return slice_bound_check(this) && default_upper_bound_evaluator(this, output_values);
 }
 
-bool Slice::evaluate_label(TensorLabelVector& output_labels) const {
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    return slice_bound_check(this) && default_label_evaluator(this, output_labels);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+bool Slice::evaluate_symbol(TensorSymbolVector& output_symbols) const {
+    return slice_bound_check(this) && ov::util::default_symbol_evaluator(this, output_symbols);
 }
 }  // namespace v8
 }  // namespace op

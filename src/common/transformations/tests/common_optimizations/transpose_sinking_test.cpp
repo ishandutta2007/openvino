@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -14,7 +14,6 @@
 #include "openvino/core/preprocess/pre_post_process.hpp"
 #include "openvino/opsets/opset6.hpp"
 #include "openvino/pass/manager.hpp"
-#include "ov_models/utils/ov_helpers.hpp"
 #include "transformations/init_node_info.hpp"
 
 using namespace testing;
@@ -97,7 +96,7 @@ TEST_P(TransposeSinkingFQ, TransposeFQReduce) {
     manager.register_pass<ov::pass::TransposeReduction>();
     manager.register_pass<ov::pass::CheckUniqueNames>(unh);
     manager.run_passes(f);
-    ASSERT_NO_THROW(check_rt_info(f));
+    OV_ASSERT_NO_THROW(check_rt_info(f));
 
     auto fc = FunctionsComparator::no_default()
                   .enable(FunctionsComparator::NODES)
@@ -195,10 +194,24 @@ public:
 
 private:
     std::shared_ptr<Node> get_reduction(NodeTypeInfo reduction_type_info, const OutputVector& inputs, bool keep_dims) {
-        auto reduction = ngraph::helpers::getNodeSharedPtr(reduction_type_info, inputs);
-        if (auto arithmetic_reduce = std::dynamic_pointer_cast<op::util::ArithmeticReductionKeepDims>(reduction))
+        std::shared_ptr<Node> reduction;
+        for (const auto& it : get_available_opsets()) {
+            const auto& opset = it.second();
+            if (opset.contains_type(reduction_type_info)) {
+                reduction = std::shared_ptr<Node>(opset.create(reduction_type_info.name));
+                reduction->set_arguments(inputs);
+                reduction->validate_and_infer_types();
+            }
+        }
+        OPENVINO_ASSERT(reduction,
+                        "supported opsets does not contain op with name: ",
+                        reduction_type_info.name,
+                        " version: ",
+                        reduction_type_info.version_id);
+
+        if (auto arithmetic_reduce = ov::as_type_ptr<op::util::ArithmeticReductionKeepDims>(reduction))
             arithmetic_reduce->set_keep_dims(keep_dims);
-        else if (auto logical_reduce = std::dynamic_pointer_cast<op::util::LogicalReductionKeepDims>(reduction))
+        else if (auto logical_reduce = ov::as_type_ptr<op::util::LogicalReductionKeepDims>(reduction))
             logical_reduce->set_keep_dims(keep_dims);
         reduction->validate_and_infer_types();
         return reduction;
@@ -213,7 +226,7 @@ TEST_P(TransposeSinking, TransposeReduction) {
     manager.register_pass<ov::pass::TransposeReduction>();
     manager.register_pass<ov::pass::CheckUniqueNames>(unh);
     manager.run_passes(f);
-    ASSERT_NO_THROW(check_rt_info(f));
+    OV_ASSERT_NO_THROW(check_rt_info(f));
 
     auto fc = FunctionsComparator::no_default()
                   .enable(FunctionsComparator::NODES)

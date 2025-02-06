@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -38,14 +38,19 @@ void op::v0::ReverseSequence::validate_and_infer_types() {
                           "Sequence lengths element type must be numeric type. Got: ",
                           seq_lengths_et);
 
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    const auto output_shape = shape_infer(this, get_node_input_partial_shapes(*this)).front();
-    OPENVINO_SUPPRESS_DEPRECATED_END
-    set_output_type(0, get_input_element_type(0), output_shape);
+    const auto output_shapes = shape_infer(this, ov::util::get_node_input_partial_shapes(*this));
+    set_output_type(0, get_input_element_type(0), output_shapes[0]);
 
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    m_normalized_seq_axis = ov::normalize_axis(this, m_seq_axis, get_input_partial_shape(0).rank());
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    const auto data_rank = get_input_partial_shape(0).rank();
+
+    if (data_rank.is_static()) {
+        m_normalized_seq_axis = ov::util::try_normalize_axis(m_seq_axis, data_rank, *this);
+    } else {
+        NODE_VALIDATION_CHECK(this,
+                              m_seq_axis >= 0,
+                              "Rank must be static in order to normalize negative axis: ",
+                              m_seq_axis);
+    }
 }
 
 std::shared_ptr<Node> op::v0::ReverseSequence::clone_with_new_inputs(const OutputVector& new_args) const {
@@ -60,15 +65,11 @@ void op::v0::ReverseSequence::set_batch_axis(int64_t batch_axis) {
 
 size_t op::v0::ReverseSequence::get_batch_axis() const {
     const auto& data_rank = get_input_partial_shape(0).rank();
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    return static_cast<size_t>(ov::normalize_axis(this, m_batch_axis, data_rank));
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    return ov::util::try_normalize_axis(m_batch_axis, data_rank, *this);
 }
 
 void op::v0::ReverseSequence::set_sequence_axis(int64_t sequence_axis) {
     m_seq_axis = sequence_axis;
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    m_normalized_seq_axis = ov::normalize_axis(this, m_seq_axis, get_input_partial_shape(0).rank());
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    m_normalized_seq_axis = ov::util::try_normalize_axis(m_seq_axis, get_input_partial_shape(0).rank(), *this);
 }
 }  // namespace ov

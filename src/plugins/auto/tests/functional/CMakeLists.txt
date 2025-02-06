@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -10,7 +10,7 @@ if(ENABLE_AUTO_BATCH)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    ie_add_compiler_flags(/wd4305)
+    ov_add_compiler_flags(/wd4305)
 endif()
 
 ov_add_test_target(

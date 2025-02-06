@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import csv
@@ -27,9 +27,9 @@ except:
     logger.warning("Please set the above env variable to get the same conformance ir names run by run!")
     has_python_api = False
 
-API_CONFORMANCE_BIN_NAME = "apiConformanceTests"
-OP_CONFORMANCE_BIN_NAME = "conformanceTests"
-SUBGRAPH_DUMPER_BIN_NAME = "subgraphsDumper"
+API_CONFORMANCE_BIN_NAME = "ov_api_conformance_tests"
+OP_CONFORMANCE_BIN_NAME = "ov_op_conformance_tests"
+SUBGRAPH_DUMPER_BIN_NAME = "ov_subgraphs_dumper"
 
 SCRIPT_DIR_PATH, SCRIPT_NAME = os.path.split(os.path.abspath(__file__))
 NO_MODEL_CONSTANT = os.path.join(SCRIPT_DIR_PATH, "data", "models.lst")
@@ -53,10 +53,14 @@ def parse_arguments():
     gtest_filter_helper = "Specify gtest filter to apply for a test run. E.g. *Add*:*BinaryConv*. The default value is None"
     ov_config_path_helper = "Specify path to a plugin config file as `.lst` file. Default value is ``"
     special_mode_help = "Specify shape mode (`static`, `dynamic` or ``) for Opset conformance or API scope type (`mandatory` or ``). Default value is ``"
+    entity_help = "Specify validation entity: `Inference`, `ImportExport`, `QueryModel` or `OpImpl` for `OP` or "\
+        "`ov_compiled_model`, `ov_infer_request` or `ov_plugin` for `API`. Default value is ``(all)"
     parallel_help = "Parallel over HW devices. For example run tests over GPU.0 and GPU.1 in case when device are the same"
     expected_failures_help = "Excepted failures list file path as csv"
     cache_path_help = "Path to the cache file with test_name list sorted by execution time as `.lst` file!"
     expected_failures_update_help = "Overwrite expected failures list in case same failures were fixed"
+    disable_rerun_help = "Disable re-run of interapted/lost tests. Default value is `False`"
+    timeout_help = "Set a custom timeout per worker in s"
 
     parser.add_argument("-d", "--device", help=device_help, type=str, required=False, default="CPU")
     parser.add_argument("-t", "--type", help=type_help, type=str, required=False, default=constants.OP_CONFORMANCE)
@@ -66,15 +70,18 @@ def parse_arguments():
     parser.add_argument("-m", "--models_path", help=models_path_help, type=str, required=False,
                         default=NO_MODEL_CONSTANT)
     parser.add_argument("-ov", "--ov_path", help=ov_help, type=str, required=False, default="")
-    parser.add_argument("-j", "--workers", help=workers_help, type=int, required=False, default=os.cpu_count() - 1)
+    parser.add_argument("-j", "--workers", help=workers_help, type=int, required=False, default=os.cpu_count())
     parser.add_argument("-c", "--ov_config_path", help=ov_config_path_helper, type=str, required=False, default="")
     parser.add_argument("-s", "--dump_graph", help=dump_graph_help, type=int, required=False, default=0)
     parser.add_argument("-sm", "--special_mode", help=special_mode_help, type=str, required=False, default="")
+    parser.add_argument("-e", "--entity", help=entity_help, type=str, required=False, default="")
     parser.add_argument("-p", "--parallel_devices", help=parallel_help, type=bool, required=False, default=False)
     parser.add_argument("-f", "--expected_failures", help=expected_failures_help, type=str, required=False, default="")
     parser.add_argument("-u", "--expected_failures_update", help=expected_failures_update_help, required=False,
                         default=False, action='store_true')
     parser.add_argument("--cache_path", help=cache_path_help, type=str, required=False, default="")
+    parser.add_argument("-r", "--disable_rerun", help=disable_rerun_help, required=False, default=False, type=bool)
+    parser.add_argument("--timeout", help=timeout_help, required=False, default=-1, type=int)
 
     return parser.parse_args()
 
@@ -82,8 +89,8 @@ def parse_arguments():
 class Conformance:
     def __init__(self, device: str, model_path: os.path, ov_path: os.path, type: str, workers: int,
                  gtest_filter: str, working_dir: os.path, ov_config_path: os.path, special_mode: str,
-                 cache_path: str, parallel_devices: bool, expected_failures_file: str,
-                 expected_failures_update: bool):
+                 entity:str, cache_path: str, parallel_devices: bool, expected_failures_file: str,
+                 expected_failures_update: bool, disable_is_rerun: bool, timeout: int):
         self._device = device
         self._model_path = model_path
         if os.path.isdir(ov_path):
@@ -96,19 +103,30 @@ class Conformance:
             rmtree(self._working_dir)
         os.mkdir(self._working_dir)
         self._cache_path = cache_path if os.path.isfile(cache_path) else ""
+        self.__entity = ""
         if type == constants.OP_CONFORMANCE:
+            if entity == "Inference" or entity == "QueryModel" or entity == "ImportExport" or entity == "" or entity == "OpImpl":
+                self.__entity = entity
+            else:
+                logger.error(f'Incorrect value to set entity type: {special_mode}. Please check `help` to get possible values')
+                exit(-1)
             if special_mode == "static" or special_mode == "dynamic" or special_mode == "":
                 self._special_mode = special_mode
             else:
+                logger.error(f'Incorrect value to set shape mode: {special_mode}. Please check `help` to get possible values')
+                exit(-1)
+            self._gtest_filter = f"*{self.__entity}*{gtest_filter}*{'' if self.__entity == 'OpImpl' else ':-*OpImpl*'}"
+        elif type == constants.API_CONFORMANCE:
+            if entity == "ov_compiled_model" or entity == "ov_plugin" or entity == "ov_infer_request" or entity == "":
+                self.__entity = entity
+            else:
                 logger.error(f'Incorrect value to set shape mode: {special_mode}. Please check to get possible values')
                 exit(-1)
-            self._gtest_filter = gtest_filter
-        elif type == constants.API_CONFORMANCE:
             self._special_mode = ""
             if special_mode == "mandatory":
-                self._gtest_filter = f"*mandatory*{gtest_filter}*:*{gtest_filter}*mandatory*"
+                self._gtest_filter = f"*{self.__entity}*mandatory*{gtest_filter}*:*{self.__entity}*{gtest_filter}*mandatory*"
             elif special_mode == "":
-                self._gtest_filter = gtest_filter
+                self._gtest_filter = f"*{self.__entity}*{gtest_filter}*"
             else:
                 logger.error(f'Incorrect value to set API scope: {special_mode}. Please check to get possible values')
                 exit(-1)
@@ -133,6 +151,8 @@ class Conformance:
         self._expected_failures_update = expected_failures_update
 
         self.is_successful_run = False
+        self._is_rerun = not disable_is_rerun
+        self._timeout = timeout
 
     def __download_models(self, url_to_download, path_to_save):
         _, file_name = os.path.split(urlparse(url_to_download).path)
@@ -164,15 +184,14 @@ class Conformance:
             rmtree(conformance_ir_path)
         os.mkdir(conformance_ir_path)
         self._model_path = file_utils.prepare_filelist(self._model_path,
-                                                       ["*.onnx", "*.pdmodel", "*.__model__", "*.pb", "*.xml",
-                                                        "*.tflite"])
+                                                       constants.SUPPORTED_MODEL_EXTENSION)
         logger.info(f"Stating model dumping from {self._model_path}")
-        cmd = f'{subgraph_dumper_path} --input_folders="{self._model_path}" --output_folder="{conformance_ir_path}"'
+        log_path = os.path.join(self._working_dir, "ov_subgraphs_dumper.log")
+        logger.info(f"ov_subgraphs_dumper.log will be saved to: {log_path}")
+        cmd = f'{subgraph_dumper_path} --input_folders="{self._model_path}" --output_folder="{conformance_ir_path}" > {log_path}'
         process = Popen(cmd, shell=True)
         out, err = process.communicate()
         if err is None:
-            for line in str(out).split('\n'):
-                logger.info(line)
             logger.info(f"Conformance IRs were saved to {conformance_ir_path}")
         else:
             logger.error(err)
@@ -199,17 +218,11 @@ class Conformance:
             failures_file.close()
         return failures
 
-    def __check_expected_failures(self):
+    def __update_expected_failures(self):
         this_failures_file = os.path.join(self._working_dir, f"{self._device}_logs", "logs", "fix_priority.csv")
         if not os.path.isfile(this_failures_file):
             return
         this_run_failures = self.__get_failed_test_from_csv(this_failures_file)
-
-        diff = this_run_failures.difference(self._expected_failures)
-        if len(diff) > 0:
-            logger.error(f"Unexpected failures: {diff}")
-            self._unexpected_failures = diff
-            self.is_successful_run = False
 
         # we do not want to update the expected failures file if there are failures that were not present
         # in the passed expected failures file, i.e. if len(self._unexpected_failures) > 0
@@ -256,14 +269,15 @@ class Conformance:
                                          working_dir=logs_dir,
                                          cache_path=self._cache_path,
                                          split_unit=constants.TEST_UNIT_NAME,
-                                         repeat_failed=1,
+                                         repeat_failed=self._is_rerun,
                                          is_parallel_devices=self._is_parallel_over_devices,
-                                         excluded_tests=self._expected_failures if not self._expected_failures_update else set())
+                                         excluded_tests=self._expected_failures if not self._expected_failures_update else set(),
+                                         timeout=self._timeout)
         conformance.run()
         self.is_successful_run = conformance.postprocess_logs()
 
         if os.path.isfile(self._expected_failures_file):
-            self.__check_expected_failures()
+            self.__update_expected_failures()
 
         final_report_name = f'report_{self._type.lower()}'
         merge_xml([parallel_report_dir], report_dir, final_report_name, self._type, True)
@@ -305,10 +319,13 @@ class Conformance:
         logger.info(f"[ARGUMENTS] --models_path = {self._model_path}")
         logger.info(f"[ARGUMENTS] --dump_graph = {dump_models}")
         logger.info(f"[ARGUMENTS] --shape_mode = {self._special_mode}")
+        logger.info(f"[ARGUMENTS] --entity = {self.__entity}")
         logger.info(f"[ARGUMENTS] --parallel_devices = {self._is_parallel_over_devices}")
         logger.info(f"[ARGUMENTS] --cache_path = {self._cache_path}")
         logger.info(f"[ARGUMENTS] --expected_failures = {self._expected_failures_file}")
         logger.info(f"[ARGUMENTS] --expected_failures_update = {self._expected_failures_update}")
+        logger.info(f"[ARGUMENTS] --disable_rerun = {not self._is_rerun}")
+        logger.info(f"[ARGUMENTS] --timeout = {self._timeout}")
 
         if self._type == constants.OP_CONFORMANCE:
             if file_utils.is_url(self._model_path):
@@ -339,9 +356,10 @@ if __name__ == "__main__":
                               args.ov_path, args.type,
                               args.workers, args.gtest_filter,
                               args.working_dir, args.ov_config_path,
-                              args.special_mode, args.cache_path,
-                              args.parallel_devices, args.expected_failures,
-                              args.expected_failures_update)
+                              args.special_mode, args.entity,
+                              args.cache_path, args.parallel_devices,
+                              args.expected_failures, args.expected_failures_update,
+                              args.disable_rerun, args.timeout)
     conformance.run(args.dump_graph)
     if not conformance.is_successful_run:
         exit(-1)

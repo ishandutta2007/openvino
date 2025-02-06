@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -15,9 +15,9 @@ const std::vector<ov::element::Type> model_types = {
         ov::element::i16,
 };
 
-const std::vector<DepthToSpace::DepthToSpaceMode> modes = {
-        DepthToSpace::DepthToSpaceMode::BLOCKS_FIRST,
-        DepthToSpace::DepthToSpaceMode::DEPTH_FIRST
+const std::vector<ov::op::v0::DepthToSpace::DepthToSpaceMode> modes = {
+        ov::op::v0::DepthToSpace::DepthToSpaceMode::BLOCKS_FIRST,
+        ov::op::v0::DepthToSpace::DepthToSpaceMode::DEPTH_FIRST
 };
 
 const std::vector<std::vector<ov::Shape>> input_shapes_bs2_static = {

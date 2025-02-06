@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,13 +13,13 @@ namespace ov {
 namespace frontend {
 namespace tensorflow {
 
-class TENSORFLOW_API ConversionExtension : public ConversionExtensionBase {
+class TENSORFLOW_FRONTEND_API ConversionExtension : public ConversionExtensionBase {
 public:
     using Ptr = std::shared_ptr<ConversionExtension>;
 
     ConversionExtension() = delete;
 
-    ConversionExtension(const std::string& op_type, const ov::frontend::CreatorFunction& converter)
+    ConversionExtension(const std::string& op_type, const ov::frontend::tensorflow::CreatorFunctionIndexed& converter)
         : ConversionExtensionBase(op_type),
           m_converter(converter) {}
 

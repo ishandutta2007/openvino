@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -12,18 +12,18 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief GroupConvolutionTransformation propagates dequantization operations through GroupConvolution operation.
  *
  * For more details about the transformation, refer to
  * [GroupConvolutionTransformation](@ref openvino_docs_OV_UG_lpt_GroupConvolutionTransformation) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 class LP_TRANSFORMATIONS_API GroupConvolutionTransformation : public ConvolutionTransformation {
 public:
-    OPENVINO_RTTI("GroupConvolutionTransformation", "0");
+    OPENVINO_RTTI("GroupConvolutionTransformation", "0", ConvolutionTransformation);
     GroupConvolutionTransformation(const Params& params = Params());
-    bool transform(TransformationContext& context, ov::pass::pattern::Matcher &m) override;
+    bool transform(ov::pass::pattern::Matcher &m) override;
     bool isQuantized(const std::shared_ptr<const Node>& layer,
         const std::vector<ov::element::Type>& defaultPrecisions) const override;
     static bool isQuantizedStatic(const std::shared_ptr<const Node>& layer,

@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -8,7 +8,7 @@
 
 ov_option (ENABLE_PROXY "Proxy plugin for OpenVINO Runtime" ON)
 
-if(WIN32 AND AARCH64 AND OV_COMPILER_IS_CLANG)
+if(WIN32 AND AARCH64 AND NOT CMAKE_CL_64)
     set(ENABLE_INTEL_CPU_DEFAULT OFF)
 else()
     set(ENABLE_INTEL_CPU_DEFAULT ON)
@@ -34,9 +34,8 @@ endif()
 
 ov_dependent_option (ENABLE_INTEL_GPU "GPU OpenCL-based plugin for OpenVINO Runtime" ${ENABLE_INTEL_GPU_DEFAULT} "X86_64 OR AARCH64;NOT APPLE;NOT WINDOWS_STORE;NOT WINDOWS_PHONE" OFF)
 
-if (ANDROID OR MINGW OR (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0) OR (NOT BUILD_SHARED_LIBS AND ENABLE_INTEL_CPU))
-    # oneDNN doesn't support old compilers and android builds for now, so we'll build GPU plugin without oneDNN
-    # also, in case of static build CPU's and GPU's oneDNNs will conflict, so we are disabling GPU's one in this case
+if (ANDROID OR MINGW OR (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0))
+    # oneDNN doesn't support old compilers and Android builds for now, so we'll build GPU plugin without oneDNN
     set(ENABLE_ONEDNN_FOR_GPU_DEFAULT OFF)
 else()
     set(ENABLE_ONEDNN_FOR_GPU_DEFAULT ON)
@@ -44,9 +43,16 @@ endif()
 
 ov_dependent_option (ENABLE_ONEDNN_FOR_GPU "Enable oneDNN with GPU support" ${ENABLE_ONEDNN_FOR_GPU_DEFAULT} "ENABLE_INTEL_GPU" OFF)
 
+ov_dependent_option (ENABLE_INTEL_NPU "NPU plugin for OpenVINO runtime" ON "X86_64;WIN32 OR LINUX" OFF)
+ov_dependent_option (ENABLE_INTEL_NPU_INTERNAL "NPU plugin internal components for OpenVINO runtime" ON "ENABLE_INTEL_NPU" OFF)
+
 ov_option (ENABLE_DEBUG_CAPS "enable OpenVINO debug capabilities at runtime" OFF)
+ov_dependent_option (ENABLE_NPU_DEBUG_CAPS "enable NPU debug capabilities at runtime" ON "ENABLE_DEBUG_CAPS;ENABLE_INTEL_NPU" OFF)
 ov_dependent_option (ENABLE_GPU_DEBUG_CAPS "enable GPU debug capabilities at runtime" ON "ENABLE_DEBUG_CAPS;ENABLE_INTEL_GPU" OFF)
 ov_dependent_option (ENABLE_CPU_DEBUG_CAPS "enable CPU debug capabilities at runtime" ON "ENABLE_DEBUG_CAPS;ENABLE_INTEL_CPU" OFF)
+ov_dependent_option (ENABLE_SNIPPETS_DEBUG_CAPS "enable Snippets debug capabilities at runtime" ON "ENABLE_DEBUG_CAPS" OFF)
+
+ov_dependent_option (ENABLE_SNIPPETS_LIBXSMM_TPP "allow Snippets to use LIBXSMM Tensor Processing Primitives" OFF "ENABLE_INTEL_CPU AND X86_64" OFF)
 
 ov_option (ENABLE_PROFILING_ITT "Build with ITT tracing. Optionally configure pre-built ittnotify library though INTEL_VTUNE_DIR variable." OFF)
 
@@ -73,17 +79,16 @@ ov_dependent_option (ENABLE_PKGCONFIG_GEN "Enable openvino.pc pkg-config file ge
 #
 
 # "OneDNN library based on OMP or TBB or Sequential implementation: TBB|OMP|SEQ"
-if(RISCV64)
-    # oneDNN does not support non-SEQ for RISC-V architecture
+if(ANDROID)
+    # on Android we experience SEGFAULT during compilation
     set(THREADING_DEFAULT "SEQ")
+elseif(RISCV64)
+    set(THREADING_DEFAULT "OMP")
 else()
     set(THREADING_DEFAULT "TBB")
 endif()
 
-set(THREADING_OPTIONS "TBB" "TBB_AUTO" "SEQ")
-if(NOT APPLE)
-    list(APPEND THREADING_OPTIONS "OMP")
-endif()
+set(THREADING_OPTIONS "TBB" "TBB_AUTO" "SEQ" "OMP")
 
 set(THREADING "${THREADING_DEFAULT}" CACHE STRING "Threading")
 set_property(CACHE THREADING PROPERTY STRINGS ${THREADING_OPTIONS})
@@ -91,6 +96,17 @@ list (APPEND OV_OPTIONS THREADING)
 if(NOT THREADING IN_LIST THREADING_OPTIONS)
     message(FATAL_ERROR "THREADING should be set to either ${THREADING_OPTIONS}")
 endif()
+
+if(X86_64 AND (WIN32 OR LINUX))
+    # we have a precompiled version of Intel OMP only for this platforms
+    set(ENABLE_INTEL_OPENMP_DEFAULT ON)
+    # temporart override to OFF for testing purposes
+    set(ENABLE_INTEL_OPENMP_DEFAULT OFF)
+else()
+    set(ENABLE_INTEL_OPENMP_DEFAULT OFF)
+endif()
+
+ov_dependent_option (ENABLE_INTEL_OPENMP "Enables usage of Intel OpenMP instead of default compiler one" ${ENABLE_INTEL_OPENMP_DEFAULT} "THREADING STREQUAL SEQ" OFF)
 
 if((THREADING STREQUAL "TBB" OR THREADING STREQUAL "TBB_AUTO") AND
     (BUILD_SHARED_LIBS OR (LINUX AND X86_64)))
@@ -102,15 +118,6 @@ endif()
 ov_dependent_option (ENABLE_TBBBIND_2_5 "Enable TBBBind_2_5 static usage in OpenVINO runtime" ${ENABLE_TBBBIND_2_5_DEFAULT} "THREADING MATCHES TBB; NOT APPLE" OFF)
 ov_dependent_option (ENABLE_TBB_RELEASE_ONLY "Only Release TBB libraries are linked to the OpenVINO Runtime binaries" ON "THREADING MATCHES TBB;LINUX" OFF)
 
-ov_dependent_option (ENABLE_INTEL_GNA "GNA support for OpenVINO Runtime" ON
-    "NOT APPLE;NOT ANDROID;X86_64;CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 5.4" OFF)
-
-ov_dependent_option (ENABLE_INTEL_GNA_DEBUG "GNA debug build" OFF "ENABLE_INTEL_GNA" OFF)
-ov_dependent_option (ENABLE_V7_SERIALIZE "enables serialization to IR v7" OFF "ENABLE_INTEL_GNA" OFF)
-ov_dependent_option (ENABLE_IR_V7_READER "Enables IR v7 reader" ${BUILD_SHARED_LIBS} "ENABLE_TESTS;ENABLE_INTEL_GNA" OFF)
-
-ov_dependent_option (ENABLE_GAPI_PREPROCESSING "Enables G-API preprocessing" ON "NOT MINGW64" OFF)
-
 ov_option (ENABLE_MULTI "Enables MULTI Device Plugin" ON)
 ov_option (ENABLE_AUTO "Enables AUTO Device Plugin" ON)
 ov_option (ENABLE_AUTO_BATCH "Enables Auto-Batching Plugin" ON)
@@ -118,8 +125,6 @@ ov_option (ENABLE_HETERO "Enables Hetero Device Plugin" ON)
 ov_option (ENABLE_TEMPLATE "Enable template plugin" ON)
 
 ov_dependent_option (ENABLE_PLUGINS_XML "Generate plugins.xml configuration file or not" OFF "BUILD_SHARED_LIBS" OFF)
-
-ov_dependent_option (GAPI_TEST_PERF "if GAPI unit tests should examine performance" OFF "ENABLE_TESTS;ENABLE_GAPI_PREPROCESSING" OFF)
 
 ov_dependent_option (ENABLE_FUNCTIONAL_TESTS "functional tests" ON "ENABLE_TESTS" OFF)
 
@@ -136,10 +141,22 @@ endif()
 ov_option(ENABLE_OV_PADDLE_FRONTEND "Enable PaddlePaddle FrontEnd" ON)
 ov_option(ENABLE_OV_IR_FRONTEND "Enable IR FrontEnd" ON)
 ov_option(ENABLE_OV_PYTORCH_FRONTEND "Enable PyTorch FrontEnd" ON)
+ov_option(ENABLE_OV_JAX_FRONTEND "Enable JAX FrontEnd" ON)
 ov_option(ENABLE_OV_IR_FRONTEND "Enable IR FrontEnd" ON)
 ov_option(ENABLE_OV_TF_FRONTEND "Enable TensorFlow FrontEnd" ON)
 ov_option(ENABLE_OV_TF_LITE_FRONTEND "Enable TensorFlow Lite FrontEnd" ON)
-ov_dependent_option(ENABLE_SNAPPY_COMPRESSION "Enables compression support for TF FE" ON
+
+if(WIN32 AND AARCH64 AND CMAKE_CL_64)
+    # Failed: openvino/src/bindings/js/node/thirdparty/node-lib.def: no such file or directory
+    set(ENABLE_JS_DEFAULT OFF)
+    # Some flags for building are failed on clang-cl win arm in snappy compression lib
+    set(ENABLE_SNAPPY_COMPRESSION_DEFAULT OFF)
+else()
+    set(ENABLE_JS_DEFAULT ON)
+    set(ENABLE_SNAPPY_COMPRESSION_DEFAULT ON)
+endif()
+
+ov_dependent_option(ENABLE_SNAPPY_COMPRESSION "Enables compression support for TF FE" ${ENABLE_SNAPPY_COMPRESSION_DEFAULT}
     "ENABLE_OV_TF_FRONTEND" OFF)
 
 ov_dependent_option (ENABLE_STRICT_DEPENDENCIES "Skip configuring \"convinient\" dependencies for efficient parallel builds" ON "ENABLE_TESTS;ENABLE_OV_ONNX_FRONTEND" OFF)
@@ -152,17 +169,8 @@ else()
     set(ENABLE_SYSTEM_LIBS_DEFAULT OFF)
 endif()
 
-if(BUILD_SHARED_LIBS)
-    set(ENABLE_SYSTEM_PUGIXML_DEFAULT ${ENABLE_SYSTEM_LIBS_DEFAULT})
-else()
-    # for static libraries case libpugixml.a must be compiled with -fPIC
-    # but we still need an ability to compile with system PugiXML and BUILD_SHARED_LIBS
-    # for Conan case where everything is compiled statically
-    set(ENABLE_SYSTEM_PUGIXML_DEFAULT OFF)
-endif()
-
-if(ANDROID)
-    # when protobuf from /usr/include is used, then Android toolchain ignores include paths
+if(CMAKE_CROSSCOMPILING AND (ANDROID OR RISCV64))
+    # when protobuf from /usr/include is used, then Android / Risc-V toolchain ignores include paths
     # but if we build for Android using vcpkg / conan / etc where flatbuffers is not located in
     # the /usr/include folders, we can still use 'system' flatbuffers
     set(ENABLE_SYSTEM_FLATBUFFERS_DEFAULT OFF)
@@ -170,18 +178,16 @@ else()
     set(ENABLE_SYSTEM_FLATBUFFERS_DEFAULT ON)
 endif()
 
-# users wants to use his own TBB version, specific either via env vars or cmake options
-if(DEFINED ENV{TBBROOT} OR DEFINED ENV{TBB_DIR} OR DEFINED TBB_DIR OR DEFINED TBBROOT)
-    set(ENABLE_SYSTEM_TBB_DEFAULT OFF)
-else()
+# use system TBB only for Debian / RPM packages
+if(CPACK_GENERATOR MATCHES "^(DEB|RPM|CONDA-FORGE|BREW|CONAN|VCPKG)$")
     set(ENABLE_SYSTEM_TBB_DEFAULT ${ENABLE_SYSTEM_LIBS_DEFAULT})
+else()
+    set(ENABLE_SYSTEM_TBB_DEFAULT OFF)
 endif()
 
 ov_dependent_option (ENABLE_SYSTEM_TBB  "Enables use of system TBB" ${ENABLE_SYSTEM_TBB_DEFAULT}
     "THREADING MATCHES TBB" OFF)
-# TODO: turn it off by default during the work on cross-os distribution, because pugixml is not
-# available out of box on all systems (like RHEL, UBI)
-ov_option (ENABLE_SYSTEM_PUGIXML "Enables use of system PugiXML" ${ENABLE_SYSTEM_PUGIXML_DEFAULT})
+ov_option (ENABLE_SYSTEM_PUGIXML "Enables use of system PugiXML" OFF)
 # the option is on by default, because we use only flatc compiler and don't use any libraries
 ov_dependent_option(ENABLE_SYSTEM_FLATBUFFERS "Enables use of system flatbuffers" ${ENABLE_SYSTEM_FLATBUFFERS_DEFAULT}
     "ENABLE_OV_TF_LITE_FRONTEND" OFF)
@@ -194,9 +200,11 @@ ov_dependent_option (ENABLE_SYSTEM_PROTOBUF "Enables use of system Protobuf" OFF
 # the option is turned off by default, because we don't want to have a dependency on libsnappy.so
 ov_dependent_option (ENABLE_SYSTEM_SNAPPY "Enables use of system version of Snappy" OFF
     "ENABLE_SNAPPY_COMPRESSION" OFF)
+# the option is turned off by default, because we are not sure that system version of ZE loader is fresh enough
+ov_dependent_option (ENABLE_SYSTEM_LEVEL_ZERO "Enables use of system version of Level Zero" OFF
+    "ENABLE_INTEL_NPU" OFF)
 
-ov_dependent_option (ENABLE_PYTHON_PACKAGING "Enables packaging of Python API in APT / YUM" OFF
-    "ENABLE_PYTHON;UNIX" OFF)
+ov_dependent_option(ENABLE_JS "Enables JS API building" ${ENABLE_JS_DEFAULT} "NOT ANDROID;NOT EMSCRIPTEN" OFF)
 
 ov_option(ENABLE_OPENVINO_DEBUG "Enable output for OPENVINO_DEBUG statements" OFF)
 
@@ -216,6 +224,10 @@ endif()
 
 if (ENABLE_PROFILING_RAW)
     add_definitions(-DENABLE_PROFILING_RAW=1)
+endif()
+
+if (ENABLE_SNIPPETS_DEBUG_CAPS)
+    add_definitions(-DSNIPPETS_DEBUG_CAPS)
 endif()
 
 ov_print_enabled_features()

@@ -1,14 +1,11 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
-#include <ie_common.h>
-#include <node.h>
-#include <string>
-
 #include "kernels/x64/dft_uni_kernel.hpp"
+#include "node.h"
 
 namespace ov {
 namespace intel_cpu {
@@ -16,17 +13,17 @@ namespace node {
 
 class DFT : public Node {
 public:
-    DFT(const std::shared_ptr<ngraph::Node>& op, const GraphContext::CPtr context);
+    DFT(const std::shared_ptr<ov::Node>& op, const GraphContext::CPtr& context);
     ~DFT() override = default;
 
     void getSupportedDescriptors() override;
     void initSupportedPrimitiveDescriptors() override;
-    void execute(dnnl::stream strm) override;
+    void execute(const dnnl::stream& strm) override;
     bool created() const override;
 
     void prepareParams() override;
 
-    static bool isSupportedOperation(const std::shared_ptr<const ngraph::Node>& op, std::string& errorMessage) noexcept;
+    static bool isSupportedOperation(const std::shared_ptr<const ov::Node>& op, std::string& errorMessage) noexcept;
 
 private:
     std::vector<int32_t> getAxes() const;
@@ -56,7 +53,6 @@ private:
 
     std::vector<int32_t> axes;
     std::vector<size_t> inputShape;
-    std::string layerErrorPrefix;
     const size_t DATA_INDEX = 0;
     const size_t AXES_INDEX = 1;
     const size_t SIGNAL_SIZE_INDEX = 2;
@@ -66,6 +62,6 @@ private:
     bool lastInverse;
 };
 
-}   // namespace node
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace node
+}  // namespace intel_cpu
+}  // namespace ov

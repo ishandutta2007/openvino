@@ -1,16 +1,16 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "shared_test_classes/single_op/comparison.hpp"
 
-#include "ov_models/builders.hpp"
+#include "common_test_utils/node_builders/comparison.hpp"
 #include "common_test_utils/ov_tensor_utils.hpp"
 
 namespace ov {
 namespace test {
-using ngraph::helpers::ComparisonTypes;
-using ngraph::helpers::InputLayerType;
+using ov::test::utils::ComparisonTypes;
+using ov::test::utils::InputLayerType;
 
 std::string ComparisonLayerTest::getTestCaseName(const testing::TestParamInfo<ComparisonTestParams> &obj) {
     std::vector<InputShape> shapes;
@@ -51,7 +51,7 @@ void ComparisonLayerTest::SetUp() {
     InputLayerType second_input_type;
     std::map<std::string, std::string> additional_config;
     ov::element::Type model_type;
-    ngraph::helpers::ComparisonTypes comparison_op_type;
+    ov::test::utils::ComparisonTypes comparison_op_type;
     std::tie(shapes,
              comparison_op_type,
              second_input_type,
@@ -66,13 +66,13 @@ void ComparisonLayerTest::SetUp() {
     std::shared_ptr<ov::Node> second_input;
     if (second_input_type == InputLayerType::PARAMETER) {
         second_input = std::make_shared<ov::op::v0::Parameter>(model_type, inputDynamicShapes[1]);
-        inputs.push_back(std::dynamic_pointer_cast<ov::op::v0::Parameter>(second_input));
+        inputs.push_back(ov::as_type_ptr<ov::op::v0::Parameter>(second_input));
     } else {
         ov::Tensor tensor = ov::test::utils::create_and_fill_tensor(model_type, targetStaticShapes.front()[1]);
         second_input = std::make_shared<ov::op::v0::Constant>(tensor);
     }
 
-    auto comparisonNode = ngraph::builder::makeComparison(inputs[0], second_input, comparison_op_type);
+    auto comparisonNode = ov::test::utils::make_comparison(inputs[0], second_input, comparison_op_type);
     function = std::make_shared<ov::Model>(comparisonNode, inputs, "Comparison");
 }
 } // namespace test

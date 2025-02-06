@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -23,6 +23,7 @@
 #include "openvino/op/util/op_types.hpp"
 #include "openvino/pass/pattern/op/or.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
+#include "transformations/utils/utils.hpp"
 
 namespace ov {
 namespace pass {
@@ -126,8 +127,8 @@ EyeDecomposition::EyeDecomposition() {
 
     auto p_eye = std::make_shared<pattern::op::Or>(OutputVector{p_eye_batch, p_eye_no_batch});
 
-    matcher_pass_callback callback = [=](pattern::Matcher& m) {
-        auto m_eye = std::dynamic_pointer_cast<ov::op::v9::Eye>(m.get_match_root());
+    matcher_pass_callback callback = [OV_CAPTURE_CPY_AND_THIS](pattern::Matcher& m) {
+        auto m_eye = ov::as_type_ptr<ov::op::v9::Eye>(m.get_match_root());
 
         if ((!m_eye) || transformation_callback(m_eye)) {
             return false;

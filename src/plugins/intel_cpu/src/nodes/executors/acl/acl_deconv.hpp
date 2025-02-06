@@ -4,10 +4,11 @@
 
 #pragma once
 
-#include "nodes/executors/deconv.hpp"
-#include "arm_compute/runtime/NEON/NEFunctions.h"
-#include "utils/debug_capabilities.h"
 #include "acl_utils.hpp"
+#include "arm_compute/runtime/NEON/NEFunctions.h"
+#include "nodes/executors/deconv.hpp"
+#include "src/cpu/CpuTypes.h"
+#include "utils/debug_capabilities.h"
 
 namespace ov {
 namespace intel_cpu {
@@ -21,8 +22,8 @@ struct ACLDeconvTensorInfo {
 };
 
 ACLDeconvTensorInfo getACLDeconvTensorInfo(const DeconvAttrs& deconvAttrs,
-                                       const std::vector<MemoryDescPtr>& srcDescs,
-                                       const std::vector<MemoryDescPtr>& dstDescs);
+                                           const std::vector<MemoryDescPtr>& srcDescs,
+                                           const std::vector<MemoryDescPtr>& dstDescs);
 
 class AclDeconvExecutor : public DeconvExecutor {
 public:
@@ -30,10 +31,10 @@ public:
     bool init(const DeconvAttrs& deconvAttrs,
               const std::vector<MemoryDescPtr>& srcDescs,
               const std::vector<MemoryDescPtr>& dstDescs,
-              const dnnl::primitive_attr &attr) override;
+              const dnnl::primitive_attr& attr) override;
     void exec(const std::vector<MemoryCPtr>& src,
               const std::vector<MemoryPtr>& dst,
-              const void *post_ops_data_) override;
+              const void* post_ops_data_) override;
 
     impl_desc_type getImplType() const override {
         return implType;
@@ -41,15 +42,13 @@ public:
 
 private:
     DeconvAttrs deconvAttrs;
-    impl_desc_type implType = impl_desc_type::acl;
+    impl_desc_type implType = impl_desc_type::gemm_acl;
 
     arm_compute::Tensor srcTensor;
     arm_compute::Tensor weiTensor;
     arm_compute::Tensor biasTensor;
     arm_compute::Tensor dstTensor;
     std::unique_ptr<arm_compute::NEDeconvolutionLayer> deconv = nullptr;
-
-    std::vector<float> weiBuffer;
 };
 
 class AclDeconvExecutorBuilder : public DeconvExecutorBuilder {
@@ -67,12 +66,7 @@ public:
     DeconvExecutorPtr makeExecutor(const ExecutorContext::CPtr context) const override {
         return std::make_shared<AclDeconvExecutor>(context);
     }
-
-private:
-    static bool validate_deconvolution_output_dimensions(unsigned int in_width, unsigned int in_height,
-                                                         unsigned int kernel_width, unsigned int kernel_height,
-                                                         const arm_compute::PadStrideInfo &pad_stride_info);
 };
 
-}   // namespace intel_cpu
-}   // namespace ov
+}  // namespace intel_cpu
+}  // namespace ov

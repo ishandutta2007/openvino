@@ -1,12 +1,13 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "cpu_map_scheduling.hpp"
 
 #include "cpu_streams_calculation.hpp"
-#include "ie_parallel.hpp"
-#include "ie_system_conf.h"
+#include "openvino/core/parallel.hpp"
+#include "openvino/runtime/system_conf.hpp"
+#include "openvino/runtime/threading/cpu_streams_info.hpp"
 
 namespace ov {
 namespace intel_cpu {
@@ -47,7 +48,7 @@ std::vector<std::vector<int>> apply_scheduling_core_type(ov::hint::SchedulingCor
 
 std::vector<std::vector<int>> apply_hyper_threading(bool& input_ht_hint,
                                                     const bool input_ht_changed,
-                                                    const std::string input_pm_hint,
+                                                    const std::string& input_pm_hint,
                                                     const std::vector<std::vector<int>>& proc_type_table) {
     std::vector<std::vector<int>> result_table = proc_type_table;
 
@@ -71,32 +72,35 @@ std::vector<std::vector<int>> apply_hyper_threading(bool& input_ht_hint,
 
 bool get_cpu_pinning(bool& input_value,
                      const bool input_changed,
-                     const int num_streams,
-                     const Config::LatencyThreadingMode latency_threading_mode,
-                     const std::vector<std::vector<int>>& proc_type_table) {
-    int result_value;
-    int num_sockets = get_default_latency_streams(latency_threading_mode);
-    bool latency = num_streams <= num_sockets && num_streams > 0;
+                     const bool cpu_reservation,
+                     const std::vector<std::vector<int>>& proc_type_table,
+                     const std::vector<std::vector<int>>& streams_info_table) {
+    bool result_value;
 
+#if defined(__APPLE__)
+    result_value = false;
+#elif defined(_WIN32)
+    if (proc_type_table.size() == 1) {
+        result_value = input_changed ? input_value : cpu_reservation;
+    } else {
+        result_value = false;
+    }
+#else
     if (input_changed) {
         result_value = input_value;
     } else {
         result_value = true;
-        if (proc_type_table[0][EFFICIENT_CORE_PROC] > 0 &&
-            proc_type_table[0][EFFICIENT_CORE_PROC] < proc_type_table[0][ALL_PROC]) {
-            result_value = latency ? false : true;
+        // The following code disables pinning in case stream contains both Pcore and Ecore
+        if (streams_info_table.size() >= 3) {
+            if ((streams_info_table[0][PROC_TYPE] == ALL_PROC) &&
+                (streams_info_table[1][PROC_TYPE] != EFFICIENT_CORE_PROC) &&
+                (streams_info_table[2][PROC_TYPE] == EFFICIENT_CORE_PROC)) {
+                result_value = cpu_reservation;
+            }
         }
     }
-#if (IE_THREAD == IE_THREAD_TBB || IE_THREAD == IE_THREAD_TBB_AUTO)
-#    if defined(_WIN32)
-    if (proc_type_table.size() > 1) {
-        result_value = false;
-    }
-#    endif
-#    if defined(__APPLE__)
-    result_value = false;
-#    endif
 #endif
+
     input_value = result_value;
 
     return result_value;

@@ -1,16 +1,17 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 #pragma once
-#include <openvino/opsets/opset1.hpp>
 #include <openvino/opsets/opset8.hpp>
 #include <vector>
+
+#include "openvino/opsets/opset1.hpp"
 
 namespace ov {
 namespace intel_cpu {
 
 inline std::vector<float> simplifyToScale(const std::shared_ptr<ov::opset8::FakeQuantize>& fq_node,
-                                   float threshold = 0.0001f) {
+                                          float threshold = 0.0001f) {
     auto levels = fq_node->get_levels();
     auto input_low = ov::as_type_ptr<ov::opset8::Constant>(fq_node->get_input_node_shared_ptr(1))->cast_vector<float>();
     auto input_high =
@@ -46,7 +47,7 @@ inline std::vector<float> simplifyToScale(const std::shared_ptr<ov::opset8::Fake
 
     std::vector<float> outScale;
 
-    if (fq_node->get_output_element_type(0) == ngraph::element::u8 &&
+    if (fq_node->get_output_element_type(0) == ov::element::u8 &&
         std::all_of(cl.cbegin(),
                     cl.cend(),
                     [](float val) {
@@ -68,7 +69,7 @@ inline std::vector<float> simplifyToScale(const std::shared_ptr<ov::opset8::Fake
         outScale = isc;
     }
 
-    if (fq_node->get_output_element_type(0) == ngraph::element::i8 &&
+    if (fq_node->get_output_element_type(0) == ov::element::i8 &&
         std::all_of(ish.cbegin(),
                     ish.cend(),
                     [&threshold](float val) {

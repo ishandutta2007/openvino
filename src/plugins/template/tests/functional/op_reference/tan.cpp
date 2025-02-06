@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -33,13 +33,13 @@ struct TanParams {
 class ReferenceTanLayerTest : public testing::TestWithParam<TanParams>, public CommonReferenceTest {
 public:
     void SetUp() override {
-        auto params = GetParam();
+        const auto& params = GetParam();
         function = CreateFunction(params.pshape, params.inType);
         inputData = {params.inputData};
         refOutData = {params.refData};
     }
     static std::string getTestCaseName(const testing::TestParamInfo<TanParams>& obj) {
-        auto param = obj.param;
+        const auto& param = obj.param;
         std::ostringstream result;
         result << "shape=" << param.pshape << "_";
         result << "iType=" << param.inType << "_";

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
@@ -19,15 +19,16 @@ from openvino import (
     serialize,
 )
 
+import openvino.properties as props
 import openvino.properties.hint as hints
-from openvino.runtime import Extension
+from openvino import Extension
 from tests.utils.helpers import (
     generate_image,
     generate_relu_compiled_model,
     get_relu_model,
     plugins_path,
     compare_models,
-    create_filename_for_test,
+    create_filenames_for_ir,
     get_model_with_template_extension,
 )
 
@@ -65,7 +66,8 @@ def test_core_class(device):
 
     input_tensor = Tensor(input_data)
     results = request.infer({"data": input_tensor})
-    assert np.allclose(results[list(results)[0]], expected_output)
+    # convert node may be introduced by API 2.0, which brings some deviation
+    assert np.allclose(results[list(results)[0]], expected_output, 1e-4, 1e-4)
 
 
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
@@ -75,7 +77,7 @@ def test_core_class(device):
 ])
 def test_compile_model(request, tmp_path, device_name):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
     model = core.read_model(model=xml_path, weights=bin_path)
@@ -88,14 +90,14 @@ def test_compile_model(request, tmp_path, device_name):
     assert isinstance(compiled_model, CompiledModel)
 
 
-@pytest.fixture()
+@pytest.fixture
 def get_model():
     return get_relu_model()
 
 
-@pytest.fixture()
+@pytest.fixture
 def get_model_path(request, tmp_path):
-    xml_path, _ = create_filename_for_test(request.node.name, tmp_path, True)
+    xml_path, _ = create_filenames_for_ir(request.node.name, tmp_path, True)
     serialize(get_relu_model(), xml_path)
     return Path(xml_path)
 
@@ -111,6 +113,7 @@ def get_model_path(request, tmp_path):
 @pytest.mark.parametrize("config", [
     None,
     {hints.performance_mode(): hints.PerformanceMode.THROUGHPUT},
+    {hints.execution_mode: hints.ExecutionMode.PERFORMANCE},
 ])
 def test_compact_api(model_type, device_name, config, request):
     compiled_model = None
@@ -127,7 +130,7 @@ def test_compact_api(model_type, device_name, config, request):
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
 def test_read_model_from_ir(request, tmp_path):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
     model = core.read_model(model=xml_path, weights=bin_path)
@@ -138,9 +141,27 @@ def test_read_model_from_ir(request, tmp_path):
 
 
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
+def test_read_model_from_ir_with_user_config(request, tmp_path):
+    core = Core()
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
+    relu_model = get_relu_model()
+    serialize(relu_model, xml_path, bin_path)
+
+    core_cache_dir = core.get_property("CACHE_DIR")
+    cache_path = tmp_path / Path("cache")
+
+    model = core.read_model(xml_path, bin_path, config={"CACHE_DIR": f"{cache_path}"})
+
+    assert isinstance(model, Model)
+    assert core_cache_dir == core.get_property("CACHE_DIR")
+    assert os.path.exists(cache_path)
+    os.rmdir(cache_path)
+
+
+# request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
 def test_read_model_from_tensor(request, tmp_path):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path, is_xml_path=True, is_bin_path=True)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path, is_xml_path=True, is_bin_path=True)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
     arr = np.ones(shape=(10), dtype=np.int8)
@@ -161,7 +182,7 @@ def test_read_model_with_wrong_input():
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
 def test_read_model_as_path(request, tmp_path):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path, True, True)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path, True, True)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
 
@@ -176,9 +197,27 @@ def test_read_model_as_path(request, tmp_path):
 
 
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
+def test_read_model_as_path_with_user_config(request, tmp_path):
+    core = Core()
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
+    relu_model = get_relu_model()
+    serialize(relu_model, xml_path, bin_path)
+
+    core_cache_dir = core.get_property("CACHE_DIR")
+    cache_path = tmp_path / Path("cache_as_path")
+
+    model = core.read_model(Path(xml_path), Path(bin_path), config={"CACHE_DIR": f"{cache_path}"})
+
+    assert isinstance(model, Model)
+    assert core_cache_dir == core.get_property("CACHE_DIR")
+    assert os.path.exists(cache_path)
+    os.rmdir(cache_path)
+
+
+# request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
 def test_read_model_from_buffer(request, tmp_path):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
     with open(bin_path, "rb") as f:
@@ -192,7 +231,7 @@ def test_read_model_from_buffer(request, tmp_path):
 # request - https://docs.pytest.org/en/7.1.x/reference/reference.html#request
 def test_model_from_buffer_valid(request, tmp_path):
     core = Core()
-    xml_path, bin_path = create_filename_for_test(request.node.name, tmp_path)
+    xml_path, bin_path = create_filenames_for_ir(request.node.name, tmp_path)
     relu_model = get_relu_model()
     serialize(relu_model, xml_path, bin_path)
     with open(bin_path, "rb") as f:
@@ -228,8 +267,8 @@ def test_available_devices(device):
 
 def test_get_property(device):
     core = Core()
-    conf = core.get_property(device, "SUPPORTED_CONFIG_KEYS")
-    assert "PERF_COUNT" in conf
+    conf = core.get_property(device, props.supported_properties())
+    assert props.enable_profiling in conf
 
 
 @pytest.mark.skipif(
@@ -238,14 +277,14 @@ def test_get_property(device):
 )
 def test_get_property_list_of_str():
     core = Core()
-    param = core.get_property("CPU", "OPTIMIZATION_CAPABILITIES")
+    param = core.get_property("CPU", props.device.capabilities)
     assert isinstance(param, list), (
-        "Parameter value for 'OPTIMIZATION_CAPABILITIES' "
+        f"Parameter value for {props.device.capabilities} "
         f"metric must be a list but {type(param)} is returned"
     )
     assert all(
         isinstance(v, str) for v in param
-    ), "Not all of the parameter values for 'OPTIMIZATION_CAPABILITIES' metric are strings!"
+    ), f"Not all of the parameter values for {props.device.capabilities} metric are strings!"
 
 
 @pytest.mark.skipif(
@@ -254,14 +293,14 @@ def test_get_property_list_of_str():
 )
 def test_get_property_tuple_of_two_ints():
     core = Core()
-    param = core.get_property("CPU", "RANGE_FOR_STREAMS")
+    param = core.get_property("CPU", props.range_for_streams)
     assert isinstance(param, tuple), (
-        "Parameter value for 'RANGE_FOR_STREAMS' "
+        f"Parameter value for {props.range_for_streams} "
         f"metric must be tuple but {type(param)} is returned"
     )
     assert all(
         isinstance(v, int) for v in param
-    ), "Not all of the parameter values for 'RANGE_FOR_STREAMS' metric are integers!"
+    ), f"Not all of the parameter values for {props.range_for_stream}s metric are integers!"
 
 
 @pytest.mark.skipif(
@@ -270,14 +309,14 @@ def test_get_property_tuple_of_two_ints():
 )
 def test_get_property_tuple_of_three_ints():
     core = Core()
-    param = core.get_property("CPU", "RANGE_FOR_ASYNC_INFER_REQUESTS")
+    param = core.get_property("CPU", props.range_for_async_infer_requests)
     assert isinstance(param, tuple), (
-        "Parameter value for 'RANGE_FOR_ASYNC_INFER_REQUESTS' "
+        f"Parameter value for {props.range_for_async_infer_requests} "
         f"metric must be tuple but {type(param)} is returned"
     )
     assert all(isinstance(v, int) for v in param), (
         "Not all of the parameter values for "
-        "'RANGE_FOR_ASYNC_INFER_REQUESTS' metric are integers!"
+        f"{props.range_for_async_infer_requests} metric are integers!"
     )
 
 
@@ -287,9 +326,9 @@ def test_get_property_tuple_of_three_ints():
 )
 def test_get_property_str():
     core = Core()
-    param = core.get_property("CPU", "FULL_DEVICE_NAME")
+    param = core.get_property("CPU", props.device.full_name)
     assert isinstance(param, str), (
-        "Parameter value for 'FULL_DEVICE_NAME' "
+        f"Parameter value for {props.device.full_name} "
         f"metric must be string but {type(param)} is returned"
     )
 
@@ -299,14 +338,14 @@ def test_query_model(device):
     model = get_relu_model()
     query_model = core.query_model(model=model, device_name=device)
     ops_model = model.get_ordered_ops()
-    ops_func_names = [op.friendly_name for op in ops_model]
+    ops_model_names = [op.friendly_name for op in ops_model]
     assert [
-        key for key in query_model.keys() if key not in ops_func_names
+        key for key in query_model.keys() if key not in ops_model_names
     ] == [], "Not all network layers present in query_model results"
     assert device in next(iter(set(query_model.values()))), "Wrong device for some layers"
 
 
-@pytest.mark.dynamic_library()
+@pytest.mark.dynamic_library
 def test_register_plugin():
     device = "TEST_DEVICE"
     lib_name = "test_plugin"
@@ -319,7 +358,7 @@ def test_register_plugin():
     assert f"Cannot load library '{full_lib_name}'" in str(e.value)
 
 
-@pytest.mark.dynamic_library()
+@pytest.mark.dynamic_library
 def test_register_plugins():
     device = "TEST_DEVICE"
     lib_name = "test_plugin"
@@ -343,8 +382,9 @@ def test_unload_plugin(device):
     core.unload_plugin(device)
 
 
-@pytest.mark.template_extension()
-@pytest.mark.dynamic_library()
+@pytest.mark.template_extension
+@pytest.mark.dynamic_library
+@pytest.mark.xfail(condition=sys.platform == "darwin", reason="Ticket - 132696")
 def test_add_extension_template_extension(device):
     core, model = get_model_with_template_extension()
     assert isinstance(model, Model)

@@ -1,21 +1,22 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
-#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/matcher_pass.hpp"
 #include "transformations_visibility.hpp"
 
 namespace ov {
 namespace pass {
 class TRANSFORMATIONS_API DeReshapeMatMul;
+class TRANSFORMATIONS_API DeReshapeFullyConnected;
 }  // namespace pass
 }  // namespace ov
 
 /**
- * @ingroup ie_transformation_common_api
- * @brief Transformation uses symbol / label information to optimize out Reshape operations surrounding MatMul.
+ * @ingroup ov_transformation_common_api
+ * @brief Transformation uses symbol information to optimize out Reshape operations surrounding MatMul.
  * It checks that surrounding Reshapes are only manipulating with batch dimensions of tensor in a do-undo kind of way.
  *
  * Example:
@@ -45,9 +46,9 @@ class TRANSFORMATIONS_API DeReshapeMatMul;
  *  Binary Elementwise Arithmetic operation without second input scalar restriction.
  *        MatMul -[-> BEA -]-> Reshape
  *  this pattern variation is only applicable for the case when input reshapes are 4D -> 3D and output reshape is 3D ->
- *  4D. Additionally, shape labels on output of MatMul should be equal to the input shape labels of the last Reshape,
+ *  4D. Additionally, shape symbols on output of MatMul should be equal to the input shape symbols of the last Reshape,
  *  meaning that this Binary Elementwise Arithmetic doesn't perform any broadcasting of input coming from MatMul -- only
- *  other input may be broadcasted to the MatMul input of this BEA. This effect (equality of MatMul output shape labels
+ *  other input may be broadcasted to the MatMul input of this BEA. This effect (equality of MatMul output shape symbols
  *  and output shape of BEA) is being handled by LabelResolvingThroughSelect transformation in the particular models
  *  that this variation targets.
  *
@@ -61,6 +62,31 @@ class TRANSFORMATIONS_API DeReshapeMatMul;
  */
 class ov::pass::DeReshapeMatMul : public ov::pass::MatcherPass {
 public:
-    OPENVINO_RTTI("DeReshapeMatMul", "0");
+    OPENVINO_MATCHER_PASS_RTTI("DeReshapeMatMul");
     DeReshapeMatMul();
+};
+
+/**
+ * @ingroup ov_transformation_common_api
+ * @brief Transformation uses symbol information to optimize out Reshape operations surrounding special cases of
+ * MatMul. It checks that surrounding Reshapes are only manipulating with batch dimensions of tensor in a do-undo kind
+ * of way. The difference with previous optimization is that this case has Reshape only on one input of MatMul and the
+ * other input is strictly 2D. Such MatMuls are also called FullyConnected
+ *
+ * Example:
+ *   Before:
+ *     [A,B,4096] -> Reshape -> [A*B,4096]
+ *                                       MatMul [A*B,4608] -> Reshape -> [A,B,4608]
+ *                             [4096,4608]
+ *
+ *   After:
+ *     [A,B,4096]  ->
+ *                   MatMul -> [A,B,4608]
+ *    [4096,4608]  ->
+ *
+ */
+class ov::pass::DeReshapeFullyConnected : public ov::pass::MatcherPass {
+public:
+    OPENVINO_MATCHER_PASS_RTTI("DeReshapeFullyConnected");
+    DeReshapeFullyConnected();
 };
