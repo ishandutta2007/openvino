@@ -13,8 +13,18 @@ public:
     RMSKernelRef() : RMSKernelBase("rms_gpu_ref") {}
     virtual ~RMSKernelRef() {}
 
-    KernelsData GetKernelsData(const Params& params, const optional_params& options) const override;
-    KernelsPriority GetKernelsPriority(const Params& params, const optional_params& options) const override;
+    KernelsData GetKernelsData(const Params& params) const override;
+    KernelsPriority GetKernelsPriority(const Params& params) const override;
     ParamsKey GetSupportedKey() const override;
+
+protected:
+    std::vector<FusedOpType> GetSupportedFusedOps() const override {
+        return {
+            FusedOpType::ACTIVATION,
+            FusedOpType::QUANTIZE,
+            FusedOpType::ELTWISE
+        };
+    }
+    JitConstants GetJitConstants(const rms_params& params, DispatchData dispatchData) const override;
 };
 }  // namespace kernel_selector

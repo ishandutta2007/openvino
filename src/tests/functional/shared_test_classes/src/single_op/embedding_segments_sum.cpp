@@ -1,9 +1,9 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "shared_test_classes/single_op/embedding_segments_sum.hpp"
-#include "ov_models/builders.hpp"
+#include "common_test_utils/node_builders/embedding_segments_sum.hpp"
 
 
 namespace ov {
@@ -59,15 +59,15 @@ void EmbeddingSegmentsSumLayerTest::SetUp() {
 
     auto param = std::make_shared<ov::op::v0::Parameter>(model_type, inputDynamicShapes.front());
 
-    auto embBag = ngraph::builder::makeEmbeddingSegmentsSum(model_type,
-                                                            ind_type,
-                                                            param,
-                                                            indices,
-                                                            segment_ids,
-                                                            num_segments,
-                                                            default_index,
-                                                            with_weights,
-                                                            with_def_index);
+    auto embBag = ov::test::utils::make_embedding_segments_sum(model_type,
+                                                               ind_type,
+                                                               param,
+                                                               indices,
+                                                               segment_ids,
+                                                               num_segments,
+                                                               default_index,
+                                                               with_weights,
+                                                               with_def_index);
 
     auto result = std::make_shared<ov::op::v0::Result>(embBag);
     function = std::make_shared<ov::Model>(result, ov::ParameterVector{param}, "embeddingSegmentsSum");

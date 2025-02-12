@@ -1,24 +1,24 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
-import os
-import sys
-import threading
 import csv
 import datetime
-import shlex
 import heapq
-
+import os
+import shlex
+import sys
+import threading
 from argparse import ArgumentParser
-from subprocess import Popen, TimeoutExpired, run, call
 from hashlib import sha256
 from pathlib import Path
 from shutil import rmtree, copyfile
+from subprocess import Popen, TimeoutExpired, run, call
 from tarfile import open as tar_open
-from utils.conformance_utils import get_logger, progressbar
-from utils import constants
-from utils import file_utils
 
 import defusedxml.ElementTree as ET
+
+from utils import constants
+from utils import file_utils
+from utils.conformance_utils import get_logger, progressbar
 
 if not constants.IS_WIN:
     from signal import SIGKILL
@@ -58,6 +58,7 @@ def parse_arguments():
     )
     split_unit_help = "Split by test or suite"
     repeat_help = "Number of times to repeat failed and interrupted tests"
+    excluded_tests_file_help = "Path to the file containing list of tests that should not be executed"
 
     parser.add_argument(
         "-e",
@@ -121,6 +122,13 @@ def parse_arguments():
         type=int,
         required=False,
         default=1
+    )
+    parser.add_argument(
+        "--excluded_tests_file",
+        help=excluded_tests_file_help,
+        type=str,
+        required=False,
+        default=None,
     )
 
     return parser.parse_args()
@@ -219,7 +227,7 @@ class TaskManager:
                     self._process_list.append(
                         Popen(
                             args,
-                            shell=constants.IS_WIN,
+                            shell=False,
                             stdout=log_file,
                             stderr=log_file,
                         )
@@ -322,9 +330,10 @@ class TestParallelRunner:
         working_dir: os.path,
         cache_path: os.path,
         split_unit: str,
-        repeat_failed: int,
+        repeat_failed: bool,
         is_parallel_devices=False,
         excluded_tests=set(),
+        timeout=0
     ):
         self._exec_file_path = exec_file_path
         self._working_dir = working_dir
@@ -332,14 +341,12 @@ class TestParallelRunner:
         self._gtest_filter = ""
         self._command = self.__init_basic_command_line_for_exec_file(test_command_line)
         self._worker_num = worker_num
-        if not os.path.exists(self._working_dir):
-            os.mkdir(self._working_dir)
-        if cache_path == "":
+        os.makedirs(self._working_dir, exist_ok=True)
+        if cache_path == "" or not os.path.exists(cache_path):
             cache_path = os.path.join(self._working_dir, "test_cache.lst")
         self._cache_path = os.path.join(cache_path)
         head, _ = os.path.split(self._cache_path)
-        if not os.path.exists(head):
-            os.mkdir(head)
+        os.makedirs(head, exist_ok=True)
         self._is_save_cache = True
         if split_unit in constants.UNIT_NAMES:
             self._split_unit = split_unit
@@ -356,6 +363,9 @@ class TestParallelRunner:
         if HAS_PYTHON_API and is_parallel_devices:
             self._available_devices = get_available_devices(self._device)
         self._excluded_tests = excluded_tests
+        self._timeout = timeout if timeout > 0 else None
+        if self._timeout is None:
+            self._timeout = DEFAULT_TEST_TIMEOUT if self._split_unit == constants.TEST_UNIT_NAME else DEFAULT_SUITE_TIMEOUT
 
     def __init_basic_command_line_for_exec_file(self, test_command_line: list):
         command = f"{self._exec_file_path}"
@@ -529,9 +539,6 @@ class TestParallelRunner:
 
     def __prepare_smart_filters(self, proved_test_dict: dict):
         def_length = len(self._command) + len(" --gtest_filter=")
-        if constants.IS_WIN:
-            # subprocess add cmd.exe to the command line on Windows if shell=True
-            def_length += len(f'{os.environ.get("COMSPEC", "cmd.exe")} /C ')
 
         longest_device = ""
         for device in self._available_devices:
@@ -669,8 +676,9 @@ class TestParallelRunner:
         return list(not_runned_tests), list(interapted_tests)
 
     def run(self):
-        if TaskManager.process_timeout == -1:
-            TaskManager.process_timeout = DEFAULT_PROCESS_TIMEOUT
+        # 15m for one test in one process
+        if TaskManager.process_timeout in (-1, DEFAULT_PROCESS_TIMEOUT):
+            TaskManager.process_timeout = self._timeout
         logger.info(f"Run test parallel is started. Worker num is {self._worker_num}")
         if len(self._available_devices) > 1:
             logger.info(
@@ -686,16 +694,9 @@ class TestParallelRunner:
         if test_filters:
             logger.info("Execute jobs taken from cache and runtime")
             worker_cnt += self.__execute_tests(test_filters, worker_cnt)
-        # 15m for one test in one process
-        if TaskManager.process_timeout in (-1, DEFAULT_PROCESS_TIMEOUT):
-            TaskManager.process_timeout = (
-                DEFAULT_SUITE_TIMEOUT
-                if self._split_unit == constants.SUITE_UNIT_NAME
-                else DEFAULT_TEST_TIMEOUT
-            )
 
         not_runned_tests, interapted_tests = self.__find_not_runned_tests()
-        if self._repeat_failed > 0:
+        if self._repeat_failed:
             if len(not_runned_tests) > 0:
                 logger.info(f"Execute not runned {len(not_runned_tests)} tests")
                 not_runned_test_filters = [
@@ -834,7 +835,7 @@ class TestParallelRunner:
                                     test_results[dir] += 1
                                 else:
                                     test_results[dir] = 1
-                                if dir != "passed":
+                                if dir != "passed" and dir != "skipped":
                                     fix_priority.append((ref_k or 0, test_name))
                                 ref_k = None
                                 test_cnt_real_saved_now += 1
@@ -845,6 +846,7 @@ class TestParallelRunner:
                     dir = INTERAPTED_DIR
                     if __save_log(logs_dir, dir, test_name):
                         interapted_tests.add(test_name)
+                        fix_priority.append((ref_k or 0, test_name))
 
                 if self._split_unit == constants.SUITE_UNIT_NAME:
                     test_cnt_real = len(test_suites)
@@ -898,7 +900,9 @@ class TestParallelRunner:
                 csv_writer = csv.writer(csv_file, dialect="excel")
                 csv_writer.writerow(["Test Name", "Fix Priority"])
                 ir_hashes = []
+                failed_tests = set()
                 for priority, name in fix_priority:
+                    failed_tests.add(name)
                     csv_writer.writerow([name, priority])
                     if "IR=" in name:
                         ir_hash = name[name.find("IR=") + 3 : name.find("_Device=")]
@@ -906,6 +910,13 @@ class TestParallelRunner:
                             _, tail = os.path.split(ir_hash)
                             ir_hash, _ = os.path.splitext(tail)
                         ir_hashes.append(ir_hash)
+
+                if len(self._excluded_tests) > 0:
+                    diff = failed_tests.difference(self._excluded_tests)
+                    if len(diff) > 0:
+                        logger.error(f"Unexpected failures: {diff}")
+                        self._unexpected_failures = diff
+                        self.is_successful_run = False
 
                 logger.info(f"Fix priorities list is saved to: {fix_priority_path}")
                 # Find all irs for failed tests
@@ -1023,8 +1034,16 @@ if __name__ == "__main__":
     logger.info(f"[ARGUMENTS] --parallel_devices={args.parallel_devices}")
     logger.info(f"[ARGUMENTS] --split_unit={args.split_unit}")
     logger.info(f"[ARGUMENTS] --repeat_failed={args.repeat_failed}")
+    logger.info(f"[ARGUMENTS] --excluded_tests_file={args.excluded_tests_file or 'None'}")
     logger.info(f"[ARGUMENTS] Executable file arguments = {exec_file_args}")
     TaskManager.process_timeout = args.process_timeout
+
+    # Get excluded tests from the file
+    excluded_tests = set()
+    if args.excluded_tests_file:
+        with open(args.excluded_tests_file, mode='r', encoding='utf-8') as excluded_tests_file:
+            excluded_tests = set(excluded_tests_file.read().split('\n'))
+
     test_runner = TestParallelRunner(
         exec_file_path=args.exec_file,
         test_command_line=exec_file_args,
@@ -1034,6 +1053,7 @@ if __name__ == "__main__":
         split_unit=args.split_unit,
         repeat_failed=args.repeat_failed,
         is_parallel_devices=args.parallel_devices,
+        excluded_tests=excluded_tests
     )
     test_runner.run()
     if not test_runner.postprocess_logs():

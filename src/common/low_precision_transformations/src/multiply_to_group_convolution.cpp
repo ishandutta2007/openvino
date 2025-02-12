@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2023 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -24,16 +24,16 @@ MultiplyToGroupConvolutionTransformation::MultiplyToGroupConvolutionTransformati
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(matcher, matcher_name);
     this->register_matcher(m, callback);
 }
 
-bool MultiplyToGroupConvolutionTransformation::transform(TransformationContext& context, ov::pass::pattern::Matcher &m) {
+bool MultiplyToGroupConvolutionTransformation::transform(ov::pass::pattern::Matcher &m) {
     const auto multiply = m.get_match_root();
-    if (!canBeTransformed(context, multiply)) {
+    if (!canBeTransformed(multiply)) {
         return false;
     }
 
@@ -111,9 +111,9 @@ bool MultiplyToGroupConvolutionTransformation::transform(TransformationContext& 
     const auto weightsNode = std::make_shared<ov::opset1::Constant>(weightsPrecision, weightsShape, weightsBuffer);
 
     const size_t spatialDimsSize = pShape.rank().get_length() - 2;
-    ngraph::Strides strides(spatialDimsSize, 1ul);
-    ngraph::CoordinateDiff pads(spatialDimsSize, 0ul);
-    ngraph::Strides dilations(spatialDimsSize, 1ul);
+    ov::Strides strides(spatialDimsSize, 1ul);
+    ov::CoordinateDiff pads(spatialDimsSize, 0ul);
+    ov::Strides dilations(spatialDimsSize, 1ul);
 
     const auto convolution = std::make_shared<ov::op::TypeRelaxed<ov::opset1::GroupConvolution>>(
         std::vector<element::Type>{ element::f32, element::f32 },
@@ -142,8 +142,8 @@ bool MultiplyToGroupConvolutionTransformation::transform(TransformationContext& 
     return true;
 }
 
-bool MultiplyToGroupConvolutionTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> operation) const {
-    if (!CleanupTransformation::canBeTransformed(context, operation)) {
+bool MultiplyToGroupConvolutionTransformation::canBeTransformed(const std::shared_ptr<Node>& operation) const {
+    if (!CleanupTransformation::canBeTransformed(operation)) {
         return false;
     }
 

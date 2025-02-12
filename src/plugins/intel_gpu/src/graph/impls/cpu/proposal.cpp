@@ -1,11 +1,11 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "impls/cpu/cpu_impl_helpers.hpp"
 #include "proposal_inst.h"
 #include "intel_gpu/runtime/engine.hpp"
-#include "implementation_map.hpp"
-#include "intel_gpu/runtime/error_handler.hpp"
+#include "impls/registry/implementation_map.hpp"
 #include "register.hpp"
 
 #include <algorithm>
@@ -194,7 +194,7 @@ struct proposal_impl : typed_primitive_impl<proposal> {
     DECLARE_OBJECT_TYPE_SERIALIZATION(cldnn::cpu::proposal_impl)
 
     std::unique_ptr<primitive_impl> clone() const override {
-        return make_unique<proposal_impl>(*this);
+        return std::make_unique<proposal_impl>(*this);
     }
 
     template <typename dtype>
@@ -387,13 +387,14 @@ struct proposal_impl : typed_primitive_impl<proposal> {
     }
 
     event::ptr execute_impl(const std::vector<event::ptr>& events, proposal_inst& instance) override {
-        for (auto& a : events) {
-            a->wait();
-        }
-
         auto& stream = instance.get_network().get_stream();
 
-        auto ev = instance.get_network().get_stream().create_user_event(false);
+        const bool pass_through_events = (stream.get_queue_type() == QueueTypes::out_of_order) && instance.all_dependencies_cpu_impl();
+
+        if (!pass_through_events) {
+            stream.wait_for_events(events);
+        }
+
         im_info_t im_info;
         if (instance.dep_memory(proposal_inst::image_info_index).get_layout().data_type == data_types::f16) {
             read_image_info<ov::element_type_traits<data_types::f16>::value_type>(stream, instance, im_info);
@@ -430,9 +431,11 @@ struct proposal_impl : typed_primitive_impl<proposal> {
                 execute<ov::element_type_traits<data_types::f32>::value_type>(stream, instance, im_info);
             }
         }
+        if (pass_through_events) {
+            return stream.group_events(events);
+        }
 
-        ev->set();
-        return ev;
+        return make_output_event(stream, instance.is_output());
     }
 
     void init_kernels(const kernels_cache&, const kernel_impl_params&) override {}
@@ -447,12 +450,10 @@ struct proposal_impl : typed_primitive_impl<proposal> {
             // - image_info[3] = { img_height, img_width, img_depth }
             // - image_info[4] = { img_height, img_width, scale_min_bbox_y, scale_min_bbox_x }
             // - image_info[6] = { img_height, img_width, img_depth, scale_min_bbox_y, scale_min_bbox_x, scale_depth_index }
-            if (count != 3 && count != 4 && count != 6) {
-                CLDNN_ERROR_MESSAGE(arg.id(), "image_info must have either 3, 4 or 6 items");
-            }
+            OPENVINO_ASSERT(one_of(count, {3, 4, 6}), arg.id(), "image_info must have either 3, 4 or 6 items");
         }
 
-        return make_unique<proposal_impl>(arg);
+        return std::make_unique<proposal_impl>(arg);
     }
 };
 

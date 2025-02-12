@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -31,6 +31,33 @@ class LoopLayerTest : public testing::WithParamInterface<LoopParams>,
                       virtual public ov::test::SubgraphBaseTest {
 public:
     static std::string getTestCaseName(const testing::TestParamInfo<LoopParams> &obj);
+
+protected:
+    void SetUp() override;
+};
+
+using StaticShapeLoopParams = typename std::tuple<
+    bool,
+    bool,
+    std::tuple<
+        bool,
+        int64_t,
+        int64_t,
+        int64_t
+        >,
+    int64_t,
+    ov::Shape,
+    ov::element::Type,
+    std::string>;
+
+/**
+ * Test case with static SHAPE version of loop operation.
+ * Total iteration count is dynamic.
+ */
+class StaticShapeLoopLayerTest : public testing::WithParamInterface<StaticShapeLoopParams>,
+                            virtual public ov::test::SubgraphBaseStaticTest {
+public:
+    static std::string getTestCaseName(const testing::TestParamInfo<StaticShapeLoopParams> &obj);
 
 protected:
     void SetUp() override;

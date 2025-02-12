@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "openvino/frontend/decoder.hpp"
+#include "openvino/op/op.hpp"
 #include "pt_framework_node.hpp"
 #include "utils.hpp"
 
@@ -40,6 +41,9 @@ private:
 };
 
 class InternalOperation : public PtFrameworkNode {
+public:
+    OPENVINO_OP("InternalOperation", "util", PtFrameworkNode);
+
 protected:
     InternalOperation(const std::string& op_type,
                       const OutputVector& inputs,
@@ -50,6 +54,12 @@ protected:
         attrs[PtFrameworkNode::failed_conversion_key] = no_conversion_reason;
         set_attrs(attrs);
     }
+};
+
+class InternalReverseOperation : public ov::op::Op {
+public:
+    OPENVINO_OP("InternalReverseOperation", "internal");
+    InternalReverseOperation(const OutputVector& inputs) : ov::op::Op(inputs) {}
 };
 }  // namespace pytorch
 }  // namespace frontend

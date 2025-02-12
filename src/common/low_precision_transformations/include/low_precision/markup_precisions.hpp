@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -24,7 +24,7 @@ class LP_TRANSFORMATIONS_API MarkupPrecisions;
 
 // Transformation is used to add customization options runtime
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief MarkupPrecisions transformation marks:
  *    1) not supported operations by PrecisionsAttribute attribute with empty precisions,
  *    2) operations with required precisions by PrecisionsAttribute attribute according to the provided restrictions,
@@ -32,10 +32,11 @@ class LP_TRANSFORMATIONS_API MarkupPrecisions;
  *
  * For more details about the transformation, refer to
  * [MarkupPrecisions](@ref openvino_docs_OV_UG_lpt_MarkupPrecisions) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 class ov::pass::low_precision::MarkupPrecisions : public ov::pass::ModelPass {
 public:
+    OPENVINO_MODEL_PASS_RTTI("low_precision::MarkupPrecisions");
     class Restriction {
     public:
         class RestrictionByVersion {
@@ -65,7 +66,6 @@ public:
         std::unordered_map<std::string, RestrictionByVersion> precisionsByVersion;
     };
 
-    OPENVINO_RTTI("MarkupPrecisions", "0");
     explicit MarkupPrecisions(const std::vector<PrecisionsRestriction>& restrictions = {},
         const std::vector<ov::element::Type>& defaultPrecisions = { ov::element::u8, ov::element::i8 });
     bool run_on_model(const std::shared_ptr<ov::Model>& m) override;

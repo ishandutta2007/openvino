@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -12,7 +12,6 @@
 #include "intel_gpu/graph/serialization/vector_serializer.hpp"
 #include "intel_gpu/runtime/compounds.hpp"
 #include "intel_gpu/runtime/layout.hpp"
-#include "intel_gpu/runtime/optionals.hpp"
 
 #include <algorithm>
 #include <string>
@@ -47,6 +46,11 @@ struct input_info {
         return *this;
     }
 
+    /// @brief Compare
+    bool operator==(const input_info& rhs) const {
+        return ((pid == rhs.pid) && (idx == rhs.idx));
+    }
+
     primitive_id pid;
     int32_t idx;
     struct cmp {
@@ -60,6 +64,10 @@ struct input_info {
             }
         }
     };
+
+    bool is_valid() const {
+        return pid.compare("") != 0;
+    }
 
     void save(BinaryOutputBuffer& ob) const {
         ob << pid;
@@ -93,12 +101,17 @@ struct prim_map_storage {
         return map.at(type_string);
     }
 
+    const cldnn::primitive_id get_type_string(const cldnn::primitive_type_id type_id) const {
+        return inverse_map.at(type_id);
+    }
+
     bool set_type_id(const std::string& type_string, const cldnn::primitive_type_id type_id) {
-        return map.insert({type_string, type_id}).second;
+        return map.insert({type_string, type_id}).second && inverse_map.insert({type_id, type_string}).second;
     }
 
 private:
     std::unordered_map<std::string, cldnn::primitive_type_id> map;
+    std::unordered_map<cldnn::primitive_type_id, std::string> inverse_map;
 };
 
 /// @brief Base class of network primitive description.
@@ -116,7 +129,14 @@ public:
           output_paddings(output_paddings),
           output_data_types(output_data_types),
           input(input),
-          num_outputs(num_outputs) {}
+          num_outputs(num_outputs) {
+        if (output_paddings.size() < num_outputs) {
+            this->output_paddings.insert(this->output_paddings.end(), num_outputs - output_paddings.size(), padding());
+        }
+        if (output_data_types.size() < num_outputs) {
+            this->output_data_types.insert(this->output_data_types.end(), num_outputs - output_data_types.size(), optional_data_type());
+        }
+    }
 
     virtual ~primitive() = default;
 
@@ -124,7 +144,7 @@ public:
     std::vector<input_info> dependencies() const {
         auto result = input;
         auto deps = get_dependencies();
-        for (auto& pid : deps) result.push_back({pid, 0});
+        for (auto& dep : deps) result.push_back(dep);
         return result;
     }
 
@@ -244,6 +264,7 @@ public:
         ib >> output_paddings;
         size_t output_data_types_size;
         ib >> output_data_types_size;
+        output_data_types.clear();
         for (size_t i = 0; i < output_data_types_size; i++) {
             bool has_value;
             ib >> has_value;
@@ -259,8 +280,24 @@ public:
         ib >> num_outputs;
     }
 
+    virtual padding get_output_padding(size_t idx) const {
+        if (idx < output_paddings.size()) {
+            return output_paddings[idx];
+        } else {
+            return padding();
+        }
+    }
+
+    virtual optional_data_type get_output_data_type(size_t idx) const {
+        if (idx < output_data_types.size()) {
+            return output_data_types[idx];
+        } else {
+            return optional_data_type();
+        }
+    }
+
 protected:
-    virtual std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const { return {}; }
+    virtual std::vector<input_info> get_dependencies() const { return {}; }
     class condition;
     friend struct primitive_info;
 };
@@ -271,9 +308,9 @@ class primitive_base : public primitive {
 protected:
     explicit primitive_base(const primitive_id& id,
                             const std::vector<input_info>& input,
-                            const std::vector<padding>& output_paddings = {padding()},
+                            const size_t num_outputs = 1,
                             const std::vector<optional_data_type> output_data_types = {optional_data_type()},
-                            const size_t num_outputs = 1)
+                            const std::vector<padding>& output_paddings = {padding()})
         : primitive(PType::type_id(), id, input, output_paddings, output_data_types, num_outputs) {}
 };
 

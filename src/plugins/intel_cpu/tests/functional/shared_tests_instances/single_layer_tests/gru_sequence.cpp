@@ -1,9 +1,8 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include <vector>
-#include <ngraph/op/util/attr_types.hpp>
 #include "single_op_tests/gru_sequence.hpp"
 #include "common_test_utils/test_constants.hpp"
 #include "common_test_utils/test_enums.hpp"

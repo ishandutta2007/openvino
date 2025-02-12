@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -190,26 +190,23 @@ void ov::op::util::BroadcastBase::validate_and_infer_types() {
     }
 
     PartialShape output_shape;
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    bool output_shape_defined = ov::evaluate_as_partial_shape(get_input_source_output(1), output_shape);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    bool output_shape_defined = ov::util::evaluate_as_partial_shape(get_input_source_output(1), output_shape);
 
     if (auto concat = ov::as_type_ptr<ov::op::v0::Concat>(input_value(1).get_node_shared_ptr())) {
         auto concat_inputs = concat->inputs();
 
         if (!output_shape_defined && concat->get_output_partial_shape(0).is_static() &&
             concat->get_shape().size() == 1 && concat_inputs.size() == shape_size(concat->get_shape())) {
-            auto output_partial_shape = std::vector<Dimension>{};
+            output_shape.resize(0);
             for (const auto& concat_input : concat_inputs) {
                 auto source_node_ptr = concat_input.get_source_output().get_node_shared_ptr();
                 if (auto source_const_ptr = ov::as_type_ptr<ov::op::v0::Constant>(source_node_ptr)) {
-                    output_partial_shape.emplace_back(source_const_ptr->get_axis_vector_val()[0]);
+                    output_shape.emplace_back(source_const_ptr->get_axis_vector_val()[0]);
                 } else {
-                    output_partial_shape.push_back(Dimension::dynamic());
+                    output_shape.push_back(Dimension::dynamic());
                 }
             }
             output_shape_defined = true;
-            output_shape = PartialShape(output_partial_shape);
         }
     }
 
@@ -220,8 +217,8 @@ void ov::op::util::BroadcastBase::validate_and_infer_types() {
         // Validate axes_mapping
         if (get_input_partial_shape(0).is_static() && get_input_partial_shape(1).is_static() &&
             get_input_partial_shape(2).is_static()) {
-            auto arg_shape = get_input_shape(0);
-            auto axes_shape = get_input_shape(2);
+            const auto& arg_shape = get_input_shape(0);
+            const auto& axes_shape = get_input_shape(2);
             auto input_rank = (arg_shape.size() == 0 && shape_size(axes_shape) > 0) ? 1 : arg_shape.size();
 
             // Rank(arg_shape) == shape_size(axes_mapping)
@@ -233,9 +230,7 @@ void ov::op::util::BroadcastBase::validate_and_infer_types() {
                                   input_rank);
 
             if (output_shape_defined && has_and_set_equal_bounds(input_value(2))) {
-                OPENVINO_SUPPRESS_DEPRECATED_START
-                auto axes_mapping_val = get_constant_from_source(input_value(2))->get_axis_vector_val();
-                OPENVINO_SUPPRESS_DEPRECATED_END
+                auto axes_mapping_val = ov::util::get_constant_from_source(input_value(2))->get_axis_vector_val();
                 validate_target_shape_none(arg_shape, axes_mapping_val, output_shape);
             }
         }
@@ -292,9 +287,7 @@ std::pair<bool, ov::AxisSet> ov::op::util::BroadcastBase::get_broadcast_axes() c
     bool axes_known = false;
 
     if (m_mode.m_type == BroadcastType::NONE) {
-        OPENVINO_SUPPRESS_DEPRECATED_START
-        const auto axes_mapping_constant = get_constant_from_source(input_value(2));
-        OPENVINO_SUPPRESS_DEPRECATED_END
+        const auto axes_mapping_constant = ov::util::get_constant_from_source(input_value(2));
         if (get_input_partial_shape(1).is_static() && axes_mapping_constant) {
             auto axes_mapping_val = axes_mapping_constant->get_axis_vector_val();
             auto target_shape = get_input_shape(1);
@@ -303,8 +296,8 @@ std::pair<bool, ov::AxisSet> ov::op::util::BroadcastBase::get_broadcast_axes() c
         }
     } else if (m_mode.m_type == BroadcastType::NUMPY || m_mode.m_type == BroadcastType::PDPD) {
         if (get_input_partial_shape(0).is_static() && get_output_partial_shape(0).is_static()) {
-            auto arg_shape = get_input_shape(0);
-            auto result_shape = get_output_shape(0);
+            const auto& arg_shape = get_input_shape(0);
+            const auto& result_shape = get_output_shape(0);
             return get_broadcast_axes_numpy_pdpd(arg_shape, result_shape, m_mode);
         }
     } else {
@@ -441,7 +434,7 @@ bool ov::op::util::BroadcastBase::evaluate(ov::TensorVector& outputs, const ov::
 
     PartialShape result_shape;
     std::pair<bool, AxisSet> pair_broadcast_axes;
-    auto arg_shape = inputs[0].get_shape();
+    const auto& arg_shape = inputs[0].get_shape();
 
     if (m_mode.m_type == BroadcastType::NONE) {
         AxisVector axes_mapping_val;
@@ -477,4 +470,11 @@ bool ov::op::util::BroadcastBase::evaluate_upper(ov::TensorVector& output_values
         (get_input_size() > 2 && !input_value(2).get_tensor().has_and_set_bound()))
         return false;
     return default_upper_bound_evaluator(this, output_values);
+}
+
+bool ov::op::util::BroadcastBase::evaluate_symbol(ov::TensorSymbolVector& output_symbols) const {
+    if (!input_value(1).get_tensor().has_and_set_bound() ||
+        (get_input_size() > 2 && !input_value(2).get_tensor().has_and_set_bound()))
+        return false;
+    return default_symbol_evaluator(this, {0}, output_symbols);
 }

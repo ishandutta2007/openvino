@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -26,14 +26,14 @@ public:
      * @param convert_type Data type to which to convert the output class indices. Allowed values: i32/i64
      * @param with_replacement Boolean that determines whether a sampled class can appear more than once in the output.
      * @param log_probs Boolean that determines whether to treat input probabilities as log probabilities.
-     * @param global_seed First seed value (key) of Phillox random number generation algorithm. (See RandomUniform for
+     * @param global_seed First seed value (key) of Philox random number generation algorithm. (See RandomUniform for
      * details)
-     * @param op_seed Second seed value (counter) of Phillox random number generation algorithm. (See RandomUniform for
+     * @param op_seed Second seed value (counter) of Philox random number generation algorithm. (See RandomUniform for
      * details)
      */
     Multinomial(const Output<Node>& input,
                 const Output<Node>& num_samples,
-                const ov::element::Type_t output_type,
+                const ov::element::Type_t convert_type,
                 const bool with_replacement,
                 const bool log_probs,
                 const uint64_t global_seed = 0,
@@ -49,7 +49,7 @@ public:
     uint64_t get_global_seed() const;
     uint64_t get_op_seed() const;
 
-    void set_convert_type(const ov::element::Type_t output_type);
+    void set_convert_type(const ov::element::Type_t convert_type);
     void set_with_replacement(const bool with_replacement);
     void set_log_probs(const bool log_probs);
     void set_global_seed(const uint64_t global_seed);

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -11,7 +11,7 @@
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 
 #include "low_precision/lpt_visibility.hpp"
-#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/matcher_pass.hpp"
 #include "openvino/opsets/opset1.hpp"
 #include "rt_info/precision_preserved_attribute.hpp"
 #include "network_helper.hpp"
@@ -29,17 +29,18 @@ class CreatePrecisionsDependentAttribute;
 }  // namespace ov
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief CreatePrecisionsDependentAttribute transformation marks OperationType operations by
  * PrecisionPreservedAttribute and AttributeType attributes with the same shared part.
  *
  * For more details about the transformation, refer to
  * [CreatePrecisionsDependentAttribute](@ref openvino_docs_OV_UG_lpt_CreatePrecisionsDependentAttribute) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 template <typename AttributeType, typename OperationType>
 class ov::pass::low_precision::CreatePrecisionsDependentAttribute : public ov::pass::MatcherPass {
 public:
+    OPENVINO_MATCHER_PASS_RTTI("low_precision::CreatePrecisionsDependentAttribute");
     CreatePrecisionsDependentAttribute() {
         auto operation = pattern::wrap_type<OperationType>();
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -10,7 +10,6 @@
 #include "low_precision/markup_bias.hpp"
 #include "low_precision/markup_can_be_quantized.hpp"
 #include "low_precision/markup_quantization_granularity.hpp"
-#include "low_precision/transformation_context.hpp"
 
 // cleanup transformations
 #include "low_precision/convert.hpp"
@@ -27,8 +26,6 @@
 using namespace testing;
 using namespace ov::pass;
 using namespace ov::pass::low_precision;
-
-OPENVINO_SUPPRESS_DEPRECATED_START
 
 SimpleLowPrecisionTransformer::SimpleLowPrecisionTransformer(
     const std::vector<ov::pass::low_precision::PrecisionsRestriction>& precisionRestrictions,

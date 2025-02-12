@@ -5,8 +5,7 @@
 #include "intel_gpu/plugin/program_builder.hpp"
 #include "intel_gpu/primitives/condition.hpp"
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 
 const size_t idx_true = 0;
 const size_t idx_false = 1;
@@ -29,9 +28,9 @@ static cldnn::condition::branch gen_branch(ProgramBuilder& p, const std::shared_
         }
     }
     config.set_property(ov::intel_gpu::max_dynamic_batch(1));
-    config.set_property(ov::intel_gpu::allow_new_shape_infer(op->is_dynamic()));
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(op->is_dynamic() || p.use_new_shape_infer()));
 
-    ProgramBuilder prog(internal_body, p.get_engine(), config, false, false, p.get_task_executor(), true);
+    ProgramBuilder prog(internal_body, p.get_engine(), config, false, p.get_task_executor(), p.get_compilation_context(), true);
     branch.inner_program = prog.get_compiled_program();
 
     auto& input_map = branch.input_map;
@@ -80,5 +79,4 @@ static void CreateIfOp(ProgramBuilder& p, const std::shared_ptr<ov::op::v8::If>&
 
 REGISTER_FACTORY_IMPL(v8, If);
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu

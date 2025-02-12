@@ -9,9 +9,8 @@ import sys
 import tempfile
 from time import perf_counter
 
-import datasets
 import openvino as ov
-from openvino.runtime import get_version
+import datasets
 from transformers import AutoTokenizer
 from transformers.onnx import export
 from transformers.onnx.features import FeaturesManager
@@ -20,7 +19,7 @@ from transformers.onnx.features import FeaturesManager
 def main():
     log.basicConfig(format='[ %(levelname)s ] %(message)s', level=log.INFO, stream=sys.stdout)
     log.info('OpenVINO:')
-    log.info(f"{'Build ':.<39} {get_version()}")
+    log.info(f"{'Build ':.<39} {ov.__version__}")
     model_name = 'bert-base-uncased'
     # Download the model
     transformers_model = FeaturesManager.get_model_from_feature('default', model_name)
@@ -57,7 +56,7 @@ def main():
     sst2_sentences = sst2['validation']['sentence']
     # Warm up
     encoded_warm_up = dict(tokenizer('Warm up sentence is here.', return_tensors='np'))
-    for _ in ireqs:
+    for _ in range(len(ireqs)):
         ireqs.start_async(encoded_warm_up)
     ireqs.wait_all()
     # Benchmark

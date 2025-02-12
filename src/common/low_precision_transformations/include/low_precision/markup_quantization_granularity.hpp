@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -24,16 +24,18 @@ class LP_TRANSFORMATIONS_API MarkupQuantizationGranularity;
 }  // namespace ov
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief MarkupPerTensorQuantization transformation marks operations as required per-tensor quantization according to the
  * provided restrictions.
  *
  * For more details about the transformation, refer to
  * [MarkupPerTensorQuantization](@ref openvino_docs_OV_UG_lpt_MarkupPerTensorQuantization) page
- * in the Inference Engine Developer Guide.
+ * in the OpenVINO Developer Guide.
  */
 class ov::pass::low_precision::MarkupQuantizationGranularity : public ov::pass::ModelPass {
 public:
+    OPENVINO_MODEL_PASS_RTTI("low_precision::MarkupQuantizationGranularity");
+
     class PerTensorQuantization {
     public:
         explicit PerTensorQuantization(const bool versionIsRequired) : versionIsRequired(versionIsRequired) {}
@@ -45,7 +47,6 @@ public:
         std::unordered_map<std::string, std::vector<PortQuantizationGranularityRestriction>> portsByVersion;
     };
 
-    OPENVINO_RTTI("MarkupPerTensorQuantization", "0");
     explicit MarkupQuantizationGranularity(const std::vector<QuantizationGranularityRestriction>& restrictions = {});
     bool run_on_model(const std::shared_ptr<ov::Model>& m) override;
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -50,6 +50,7 @@ std::ostream& operator<<(std::ostream& s, const PadType& type);
 enum class RoundingType {
     FLOOR = 0,
     CEIL = 1,
+    CEIL_TORCH = 2,
 };
 
 OPENVINO_API
@@ -152,6 +153,11 @@ enum class TopKMode {
 
 OPENVINO_API
 std::ostream& operator<<(std::ostream& s, const TopKMode& type);
+
+enum class PhiloxAlignment { TENSORFLOW, PYTORCH, MOCK };
+
+OPENVINO_API
+std::ostream& operator<<(std::ostream& s, const PhiloxAlignment& alignment);
 
 /// \brief Implicit broadcast specification
 struct OPENVINO_API AutoBroadcastSpec {
@@ -267,6 +273,14 @@ public:
     AttributeAdapter(op::TopKMode& value) : EnumAttributeAdapterBase<op::TopKMode>(value) {}
 
     OPENVINO_RTTI("AttributeAdapter<TopKMode>");
+};
+
+template <>
+class OPENVINO_API AttributeAdapter<op::PhiloxAlignment> : public EnumAttributeAdapterBase<op::PhiloxAlignment> {
+public:
+    AttributeAdapter(op::PhiloxAlignment& value) : EnumAttributeAdapterBase<op::PhiloxAlignment>(value) {}
+
+    OPENVINO_RTTI("AttributeAdapter<PhiloxAlignment>");
 };
 
 template <>

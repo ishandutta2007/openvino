@@ -1,8 +1,13 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 import gc
 
 import numpy as np
+# noinspection PyUnresolvedReferences
+try:
+    import openvino_tokenizers  # do not delete, needed for text models
+except:
+    pass
 from models_hub_common.multiprocessing_utils import multiprocessing_run
 from models_hub_common.utils import compare_two_tensors
 from openvino import convert_model
@@ -15,6 +20,7 @@ rng = np.random.default_rng(seed=56190)
 
 class TestConvertModel:
     infer_timeout = 600
+    ov_config = {}
 
     def load_model(self, model_name, model_link):
         raise "load_model is not implemented"
@@ -55,7 +61,7 @@ class TestConvertModel:
 
     def infer_ov_model(self, ov_model, inputs, ie_device):
         core = Core()
-        compiled = core.compile_model(ov_model, ie_device)
+        compiled = core.compile_model(ov_model, ie_device, self.ov_config)
         ov_outputs = compiled(inputs)
         return ov_outputs
 
@@ -66,27 +72,33 @@ class TestConvertModel:
 
         fw_eps = 5e-2
         is_ok = True
-        if isinstance(fw_outputs, dict):
+        if isinstance(fw_outputs, np.ndarray):
+            assert isinstance(ov_outputs, np.ndarray), "OV output structure does not match FW output."
+            print(f"fw_re: {fw_outputs};\n ov_res: {ov_outputs}")
+            is_ok = is_ok and compare_two_tensors(fw_outputs, ov_outputs, fw_eps)
+        elif isinstance(fw_outputs, dict):
             for out_name in fw_outputs.keys():
                 cur_fw_res = fw_outputs[out_name]
                 assert out_name in ov_outputs, \
                     "OpenVINO outputs does not contain tensor with name {}".format(out_name)
                 cur_ov_res = ov_outputs[out_name]
-                print(f"fw_re: {cur_fw_res};\n ov_res: {cur_ov_res}")
-                is_ok = is_ok and compare_two_tensors(cur_ov_res, cur_fw_res, fw_eps)
-        else:
+                is_ok = is_ok and self.compare_results(cur_fw_res, cur_ov_res)
+        elif isinstance(fw_outputs, (list, tuple)):
             for i in range(len(ov_outputs)):
                 cur_fw_res = fw_outputs[i]
                 cur_ov_res = ov_outputs[i]
-                print(f"fw_res: {cur_fw_res};\n ov_res: {cur_ov_res}")
-                is_ok = is_ok and compare_two_tensors(cur_ov_res, cur_fw_res, fw_eps)
+                is_ok = is_ok and self.compare_results(cur_fw_res, cur_ov_res)
+        else:
+            raise Exception("Unknown type in FW outputs: {}".format(fw_outputs))
         assert is_ok, "Accuracy validation failed"
+        return is_ok
 
     def teardown_method(self):
         # deallocate memory after each test case
         gc.collect()
 
     def _run(self, model_name, model_link, ie_device):
+        self.model_name = model_name
         print("Load the model {} (url: {})".format(model_name, model_link))
         fw_model = self.load_model(model_name, model_link)
         print("Retrieve inputs info")
@@ -95,10 +107,13 @@ class TestConvertModel:
         inputs = self.prepare_inputs(inputs_info)
         print("Convert the model into ov::Model")
         ov_model = self.convert_model(fw_model)
-        print("Infer the original model")
-        fw_outputs = self.infer_fw_model(fw_model, inputs)
         print("Infer ov::Model")
         ov_outputs = self.infer_ov_model(ov_model, inputs, ie_device)
+        
+        # Run original FW inference after OV inference, as original FW inference may change original FW model,
+        # which results in corruption of shared memory.
+        print("Infer the original model")
+        fw_outputs = self.infer_fw_model(fw_model, inputs)
         print("Compare framework and OpenVINO results")
         self.compare_results(fw_outputs, ov_outputs)
 

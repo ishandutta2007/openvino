@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -17,13 +17,13 @@ TRANSFORMATIONS_API void disable_keep_const_precision(const std::shared_ptr<Node
 TRANSFORMATIONS_API bool is_keep_const_precision(const std::shared_ptr<const Node>& node);
 
 /**
- * @ingroup ie_runtime_attr_api
+ * @ingroup ov_runtime_attr_api
  * @brief KeepConstPrecision class represents runtime info attribute that marks a Constant
  * as prohibitted to fuse precision in ConvertPrecision
  */
 class TRANSFORMATIONS_API KeepConstPrecision : public RuntimeAttribute {
 public:
-    OPENVINO_RTTI("keep_const_precision", "0");
+    OPENVINO_RTTI("keep_const_precision", "0", RuntimeAttribute);
 
     KeepConstPrecision() = default;
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -35,6 +35,32 @@ static inline T quantize(const T arg,
     return static_cast<T>(std::nearbyint((arg - in_low) / (in_high - in_low) * levels_minus_one) / levels_minus_one *
                               (out_high - out_low) +
                           out_low);
+}
+
+template <>
+inline ov::bfloat16 quantize(const ov::bfloat16 arg,
+                             const ov::bfloat16 in_low,
+                             const ov::bfloat16 in_high,
+                             const ov::bfloat16 out_low,
+                             const ov::bfloat16 out_high,
+                             const ov::bfloat16 levels_minus_one) {
+    if (arg <= std::min(in_low, in_high)) {
+        return out_low;
+    } else if (arg > std::max(in_low, in_high)) {
+        return out_high;
+    }
+
+    // make explicit convertion bf16->float to prevent implicit conversion bf16->float->bf16 on every operation
+    const float arg_f = arg;
+    const float in_low_f = in_low;
+    const float in_high_f = in_high;
+    const float out_low_f = out_low;
+    const float out_high_f = out_high;
+    const float levels_minus_one_f = levels_minus_one;
+
+    return static_cast<ov::bfloat16>(std::nearbyint((arg_f - in_low_f) / (in_high_f - in_low_f) * levels_minus_one_f) /
+                                         levels_minus_one_f * (out_high_f - out_low_f) +
+                                     out_low_f);
 }
 
 static std::vector<size_t> compute_strides(const ov::Shape& out_shape, const ov::Shape& shape);
@@ -318,19 +344,15 @@ std::tuple<size_t, size_t> get_inner_stride(size_t num_output_elements,
         return (last == 1 && dim > 1) || (last > 1 && dim == 1);
     });
     if (it == shape.rend()) {
-        const size_t num_elements = shape_size(shape);
-        return std::tuple<size_t, size_t>{
-            num_elements,
-            last == 1 ? current_output_inner_stride : std::min(current_output_inner_stride, num_elements)};
+        const auto num_elements = shape_size(shape);
+        return {num_elements,
+                last == 1 ? current_output_inner_stride : std::min(current_output_inner_stride, num_elements)};
     }
-    const size_t idx = std::distance(it, shape.rbegin()) + static_cast<int64_t>(shape.size());
-    const size_t inner_stride =
-        std::accumulate(shape.begin() + idx, shape.end(), static_cast<size_t>(1), std::multiplies<size_t>());
-    const size_t output_inner_stride = std::accumulate(output_shape.begin() + output_shape.size() - shape.size() + idx,
-                                                       output_shape.end(),
-                                                       static_cast<size_t>(1),
-                                                       std::multiplies<size_t>());
-    return std::tuple<size_t, size_t>{inner_stride, std::min(current_output_inner_stride, output_inner_stride)};
+    const auto idx = std::distance(it, shape.rbegin()) + static_cast<std::ptrdiff_t>(shape.size());
+    const auto inner_stride = shape_size(shape.begin() + idx, shape.end());
+    const auto output_inner_stride =
+        shape_size(output_shape.begin() + (output_shape.size() - shape.size() + idx), output_shape.end());
+    return {inner_stride, std::min(current_output_inner_stride, output_inner_stride)};
 }
 
 template <typename T, typename F>

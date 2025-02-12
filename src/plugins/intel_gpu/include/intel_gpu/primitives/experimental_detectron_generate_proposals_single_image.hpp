@@ -35,10 +35,25 @@ struct experimental_detectron_generate_proposals_single_image
            float min_size,
            float nms_threshold,
            int64_t pre_nms_count,
-           int64_t post_nms_count,
-           const padding& output_padding = {}) :
-            primitive_base{id, {input_im_info, input_anchors, input_deltas, input_scores, output_roi_scores}, {output_padding}},
+           int64_t post_nms_count) :
+            primitive_base{id, {input_im_info, input_anchors, input_deltas, input_scores, output_roi_scores}},
             output_roi_scores{output_roi_scores.pid},
+            min_size{min_size},
+            nms_threshold{nms_threshold},
+            pre_nms_count{pre_nms_count},
+            post_nms_count{post_nms_count} {}
+
+    experimental_detectron_generate_proposals_single_image(const primitive_id& id,
+           const input_info& input_im_info,
+           const input_info& input_anchors,
+           const input_info& input_deltas,
+           const input_info& input_scores,
+           float min_size,
+           float nms_threshold,
+           int64_t pre_nms_count,
+           int64_t post_nms_count) :
+            primitive_base{id, {input_im_info, input_anchors, input_deltas, input_scores}},
+            output_roi_scores{},
             min_size{min_size},
             nms_threshold{nms_threshold},
             pre_nms_count{pre_nms_count},
@@ -92,8 +107,8 @@ struct experimental_detectron_generate_proposals_single_image
     }
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
+    std::vector<input_info> get_dependencies() const override {
+        std::vector<input_info> ret;
         if (!output_roi_scores.empty())
             ret.push_back(output_roi_scores);
         return ret;

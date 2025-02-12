@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,7 +13,7 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief ReduceBaseTransformation: base class for Reduce*Transformation,
  * detects dequantization operations in front of the Reduce* operation and
  * propagates them through the Reduce* if possible.
@@ -22,8 +22,8 @@ namespace low_precision {
 class LP_TRANSFORMATIONS_API ReduceBaseTransformation : public LayerTransformation {
 public:
     ReduceBaseTransformation(const Params& params = Params());
-    bool transform(TransformationContext& context, ov::pass::pattern::Matcher& m) override;
-    bool canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> reduce) const override;
+    bool transform(ov::pass::pattern::Matcher& m) override;
+    bool canBeTransformed(const std::shared_ptr<Node>& reduce) const override;
 
 protected:
     virtual void changeDequantizationValues(

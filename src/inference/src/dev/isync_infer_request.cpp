@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -121,6 +121,16 @@ const std::shared_ptr<const ov::ICompiledModel>& ov::ISyncInferRequest::get_comp
 }
 
 ov::ISyncInferRequest::FoundPort ov::ISyncInferRequest::find_port(const ov::Output<const ov::Node>& port) const {
+    // check if the tensor names of target port is a subset of source port's tensor names
+    auto check_tensor_names = [](const std::unordered_set<std::string>& source,
+                                 const std::unordered_set<std::string>& target) {
+        for (auto const& name : target) {
+            if (source.find(name) == source.end())
+                return false;
+        }
+        return true;
+    };
+
     // This function is hotspot, need optimization.
     auto check_nodes = [](const ov::Node* node1, const ov::Node* node2) {
         return node1 == node2 ||
@@ -143,8 +153,8 @@ ov::ISyncInferRequest::FoundPort ov::ISyncInferRequest::find_port(const ov::Outp
     ov::ISyncInferRequest::FoundPort::Type type = ov::ISyncInferRequest::FoundPort::Type::INPUT;
     for (const auto& ports : {get_inputs(), get_outputs()}) {
         for (size_t i = 0; i < ports.size(); i++) {
-            if (ports[i].get_index() == port.get_index() && ports[i].get_names() == port.get_names() &&
-                check_nodes(ports[i].get_node(), port.get_node())) {
+            if (ports[i].get_index() == port.get_index() && check_nodes(ports[i].get_node(), port.get_node()) &&
+                check_tensor_names(ports[i].get_names(), port.get_names())) {
                 std::lock_guard<std::mutex> lock(m_cache_mutex);
                 m_cached_ports[port_hash] = {i, type};
                 return m_cached_ports[port_hash];
@@ -249,11 +259,7 @@ void ov::ISyncInferRequest::set_tensors(const ov::Output<const ov::Node>& port,
 
 void ov::ISyncInferRequest::set_tensors_impl(const ov::Output<const ov::Node> port,
                                              const std::vector<ov::SoPtr<ov::ITensor>>& tensors) {
-    OPENVINO_ASSERT_HELPER(::ov::NotImplemented,
-                           "",
-                           false,
-                           "Not Implemented",
-                           "set_input_tensors/set_tensors are not supported by this plugin");
+    OPENVINO_THROW_NOT_IMPLEMENTED("Not Implemented set_input_tensors/set_tensors are not supported by this plugin");
 }
 
 void ov::ISyncInferRequest::check_tensor(const ov::Output<const ov::Node>& port,

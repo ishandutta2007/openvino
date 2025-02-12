@@ -46,6 +46,10 @@ public:
         function = CreateFunction(params);
         inputData = {params.data_tensor.data, params.scale_tensor.data, params.bias_tensor.data};
         refOutData = {params.expected_tensor.data};
+
+        if (params.data_tensor.type == element::f16) {
+            threshold = 3e-2f;
+        }
     }
 
     static string getTestCaseName(const testing::TestParamInfo<GroupNormalizationParams>& obj) {

@@ -1,9 +1,12 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "snippets/pass/align_element_types.hpp"
+
+#include "snippets/pass/propagate_precision.hpp"
 #include "snippets/itt.hpp"
+#include "snippets/utils/utils.hpp"
 
 namespace ov {
 namespace snippets {
@@ -27,7 +30,8 @@ bool pass::AlignElementTypes::run_on_model(const std::shared_ptr<ov::Model>& m) 
     for (size_t i = 0; i < m_output_precisions.size(); i++) {
         const auto needed_out_type = m_output_precisions[i];
         if (results[i]->get_input_element_type(0) != needed_out_type) {
-            std::shared_ptr<ov::Node> consumer = results[i];
+            const auto& shape_infer_leaf = utils::get_leaf_node_of_first_parent_shape_infer_seq(results[i]);
+            std::shared_ptr<ov::Node> consumer = shape_infer_leaf ? shape_infer_leaf : results[i];
             auto parent_output = consumer->get_input_source_output(0);
 
             // Snippets supports Transpose only after Parameter or before Result nodes
@@ -38,6 +42,20 @@ bool pass::AlignElementTypes::run_on_model(const std::shared_ptr<ov::Model>& m) 
                                 "If Result has Transpose on input, this Result must be single consumer of the Transpose");
                 parent_output = transpose->get_input_source_output(0);
                 consumer = transpose;
+            }
+
+            // If there is already Convert[needed_in_type->original_type] and this node has only one consumer, we can remove the Convert,
+            // since the sequence existing Convert[needed_in_type->original_type] -> new Convert[original_type->needed_in_type] is redundant
+            if (const auto existing_convert = ov::as_type_ptr<ov::snippets::op::ConvertSaturation>(parent_output.get_node_shared_ptr())) {
+                const auto actual_before = existing_convert->get_input_element_type(0);
+                const auto actual_after = existing_convert->get_output_element_type(0);
+                const auto required_after = needed_out_type;
+                if (ov::snippets::pass::PropagatePrecision::can_be_removed(actual_before, actual_after, required_after) &&
+                    parent_output.get_target_inputs().size() == 1) {
+                    // remove existing convert
+                    existing_convert->output(0).replace(existing_convert->input_value(0));
+                    continue;
+                }
             }
 
             const auto convert = std::make_shared<op::ConvertSaturation>(parent_output, needed_out_type);
@@ -60,17 +78,12 @@ bool pass::AlignElementTypes::run_on_model(const std::shared_ptr<ov::Model>& m) 
             parameter->set_element_type(needed_in_type);
             parameter->validate_and_infer_types();
 
-            auto parent_output = parameter->output(0);
-            auto consumer_inputs = parent_output.get_target_inputs();
-
-            const auto& first_child = consumer_inputs.begin()->get_node()->shared_from_this();
-            // Note: RankNormalization of is designed for shape-inference purposes only.
+            // Note: shape infer ops are designed for shape-inference purposes only.
             // It does not process any data (nor does it emit any code), so it doesn't require Convert operations
-            if (is_type<op::RankNormalization>(first_child)) {
-                OPENVINO_ASSERT(consumer_inputs.size() == 1, "RankNormalization is supposed to be the only consumer");
-                parent_output = first_child->output(0);
-                consumer_inputs = parent_output.get_target_inputs();
-            }
+            const auto& shape_infer_leaf = utils::get_leaf_node_of_first_child_shape_infer_seq(parameter);
+            const auto& first_child = shape_infer_leaf ? shape_infer_leaf : parameter;
+            auto parent_output = first_child->output(0);
+            auto consumer_inputs = parent_output.get_target_inputs();
 
             // Snippets supports Transpose only after Parameter or before Result nodes
             // So we have to insert Convert after Transpose (if there is) on Subgraph inputs
@@ -83,6 +96,20 @@ bool pass::AlignElementTypes::run_on_model(const std::shared_ptr<ov::Model>& m) 
 
                 parent_output = transpose;
                 consumer_inputs = parent_output.get_target_inputs();
+            }
+
+            // If there is already Convert[original_type->needed_in_type] and this node is alone consumer, we can remove the Convert,
+            // since the sequence new Convert[needed_in_type->original_type] -> existing Convert[original_type->needed_in_type] is redundant
+            if (const auto existing_convert = ov::as_type_ptr<ov::snippets::op::ConvertSaturation>(consumer_inputs.cbegin()->get_node()->shared_from_this())) {
+                const auto actual_before = needed_in_type;
+                const auto actual_after = original_type;
+                const auto required_after = existing_convert->get_element_type();
+                if (ov::snippets::pass::PropagatePrecision::can_be_removed(actual_before, actual_after, required_after) &&
+                    consumer_inputs.size() == 1) {
+                    // remove existing convert
+                    existing_convert->output(0).replace(parent_output);
+                    continue;
+                }
             }
 
             const auto& convert = std::make_shared<ov::snippets::op::ConvertSaturation>(parent_output, original_type);

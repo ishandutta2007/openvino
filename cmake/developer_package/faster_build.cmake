@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -18,11 +18,4 @@ function(ov_build_target_faster TARGET_NAME)
     if(FASTER_BUILD_PCH)
         target_precompile_headers(${TARGET_NAME} ${FASTER_BUILD_PCH})
     endif()
-endfunction()
-
-# deprecated
-
-function(ie_faster_build)
-    message(WARNING "ie_faster_build is deprecated, use ov_build_target_faster instead")
-    ov_build_target_faster(${ARGV})
 endfunction()

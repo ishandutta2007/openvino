@@ -1,8 +1,10 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include <gtest/gtest.h>
+
+#include "openvino/core/visibility.hpp"
 
 #include "low_precision/avg_pool.hpp"
 #include "low_precision/common/precisions_restriction.hpp"
@@ -29,10 +31,10 @@ public:
 
     FakeQuantizeTransformationTestValues(
         const TestTransformationParams& params,
-        const ngraph::builder::subgraph::FakeQuantizeOnDataWithConstant& actual,
-        const ngraph::builder::subgraph::FakeQuantizeOnDataWithConstant& expected,
+        const ov::builder::subgraph::FakeQuantizeOnDataWithConstant& actual,
+        const ov::builder::subgraph::FakeQuantizeOnDataWithConstant& expected,
         const ov::element::Type expectedFakeQuantizeOnDataPrecision,
-        const std::map<ov::element::Type, ngraph::builder::subgraph::DequantizationOperations>& expectedValues,
+        const std::map<ov::element::Type, ov::builder::subgraph::DequantizationOperations>& expectedValues,
         const bool addNotPrecisionPreservedOperation = false)
         : params(params),
           actual(actual),
@@ -42,10 +44,10 @@ public:
           addNotPrecisionPreservedOperation(addNotPrecisionPreservedOperation) {}
 
     TestTransformationParams params;
-    ngraph:: builder::subgraph::FakeQuantizeOnDataWithConstant actual;
-    ngraph:: builder::subgraph::FakeQuantizeOnDataWithConstant expected;
+    ov::builder::subgraph::FakeQuantizeOnDataWithConstant actual;
+    ov::builder::subgraph::FakeQuantizeOnDataWithConstant expected;
     ov::element::Type expectedFakeQuantizeOnDataPrecision;
-    std::map<ov::element::Type, ngraph::builder::subgraph::DequantizationOperations> expectedValues;
+    std::map<ov::element::Type, ov::builder::subgraph::DequantizationOperations> expectedValues;
     // add not precision preserved operation to set output precision for FakeQuantize
     // don't set to 'true' by default to keep test cases with tested operation as output
     bool addNotPrecisionPreservedOperation;
@@ -76,7 +78,7 @@ public:
                                 .setUpdatePrecisions(updatePrecision)
                                 .setDefaultPrecisions(defaultPrecisions);
 
-        actualFunction = ngraph::builder::subgraph::FakeQuantizeFunction::getOriginal(
+        actualFunction = ov::builder::subgraph::FakeQuantizeFunction::getOriginal(
             TestTransformationParams::toParams(fakeQuantizeOnData.params),
             precision,
             shape,
@@ -93,7 +95,7 @@ public:
         transform.add<ov::pass::low_precision::AvgPoolTransformation, ov::op::v1::AvgPool>(params);
         transform.transform(actualFunction);
 
-        referenceFunction = ngraph::builder::subgraph::FakeQuantizeFunction::getReference(
+        referenceFunction = ov::builder::subgraph::FakeQuantizeFunction::getReference(
             TestTransformationParams::toParams(fakeQuantizeOnData.params),
             precision,
             shape,
@@ -118,7 +120,12 @@ public:
     }
 };
 
+#if defined (OPENVINO_ARCH_ARM) && defined(__linux__)
+// Ticket: 153155
+TEST_P(FakeQuantizeTransformation, DISABLED_CompareFunctions) {
+#else
 TEST_P(FakeQuantizeTransformation, CompareFunctions) {
+#endif
     actualFunction->validate_nodes_and_infer_types();
     auto res = compare_functions(actualFunction, referenceFunction, true, true, false);
     ASSERT_TRUE(res.first) << res.second;

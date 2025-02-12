@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "common_test_utils/ov_test_utils.hpp"
+#include "openvino/opsets/opset8.hpp"
 #include "transformations/low_precision/mark_dequantization_subgraph.hpp"
 #include "transformations/utils/utils.hpp"
 
@@ -76,7 +77,7 @@ TEST_F(TransformationTestsF, ConvertSubtractDequantizationSubgraph) {
 
     model = std::make_shared<Model>(mul, ParameterVector{data});
 
-    manager.register_pass<pass::MarkDequantizationSubgraph>(element::TypeVector{element::u8});
+    manager.register_pass<pass::MarkDequantization>(element::TypeVector{element::u8});
     manager.register_pass<pass::ConvertSubtract>();
 }
 

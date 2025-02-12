@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,13 +13,13 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief EltwiseBaseTransformation is base class for element-wise LPT transformations.
  */
 class LP_TRANSFORMATIONS_API EltwiseBaseTransformation : public LayerTransformation {
 public:
     EltwiseBaseTransformation(const Params& params) : LayerTransformation(params) {}
-    bool canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> layer) const override;
+    bool canBeTransformed(const std::shared_ptr<Node>& layer) const override;
     bool isPrecisionPreserved(std::shared_ptr<Node> layer) const noexcept override;
 
     static bool isBroadcasted(const PartialShape& shape);

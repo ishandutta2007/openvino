@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -113,8 +113,6 @@ namespace kernel_selector {
 
 std::string toCLType(WeightsType wType) {
     switch (wType) {
-        case WeightsType::BINARY:
-            return GetTypeName<uint32_t>();
         case WeightsType::INT4:
         case WeightsType::INT8:
             return GetTypeName<int8_t>();
@@ -134,8 +132,6 @@ std::string toCLType(WeightsType wType) {
 
 std::string toCLType(Datatype dType) {
     switch (dType) {
-        case Datatype::BINARY:
-            return GetTypeName<uint32_t>();
         case Datatype::INT8:
             return GetTypeName<int8_t>();
         case Datatype::UINT8:
@@ -201,10 +197,14 @@ std::string toCodeString(const Tensor::Dim& dim, size_t offset, bool padded, boo
             pad_str = " + " + std::to_string(dim.pad.Total());
         }
     }
-    if (dim.is_dynamic || pad_is_dynamic) {
+    if (dim.is_dynamic) {
         snprintf(buf, sizeof(buf), "(shape_info[%zu] %s)", offset, pad_str.c_str());
     } else {
-        snprintf(buf, sizeof(buf), "%zu", dim.v + (padded ? dim.pad.Total() : 0));
+        if (pad_is_dynamic) {
+            snprintf(buf, sizeof(buf), "(%zu %s)", dim.v, pad_str.c_str()); // Static dim, dynamic padding
+        } else {
+            snprintf(buf, sizeof(buf), "%zu", dim.v + (padded ? dim.pad.Total() : 0));  // Static dim, static padding
+        }
     }
     return buf;
 }
@@ -326,8 +326,8 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
     JitDefinitions baseDefinitions = TensorBaseTJitConstant::GetDefinitions(_tensor);
 
     JitDefinitions definitions{};
-    DimensionAccessHelper dims(_tensor);
-    DimensionAccessHelper dims_padded(_tensor, true);
+    DimensionAccessHelperJit dims(_tensor);
+    DimensionAccessHelperJit dims_padded(_tensor, true);
     // shape_info layout
     // if only y has dynamic padding:
     // [dim_b, dim_f, dim_v, dim_u, dim_w, dim_z, dim_y, dim_x, pad_before_y, pad_after_y]
@@ -363,7 +363,9 @@ JitDefinitions DataTensorJitConstant::GetDefinitions() const {
     if (_tensor.is_dynamic()) {
         if (_tensor.GetLayout() == DataLayout::bf || _tensor.GetLayout() == DataLayout::bfyx ||
             _tensor.GetLayout() == DataLayout::bfzyx || _tensor.GetLayout() == DataLayout::bfwzyx ||
-            _tensor.GetLayout() == DataLayout::bfuwzyx || _tensor.GetLayout() == DataLayout::bfvuwzyx) {
+            _tensor.GetLayout() == DataLayout::bfuwzyx || _tensor.GetLayout() == DataLayout::bfvuwzyx ||
+            _tensor.GetLayout() == DataLayout::b_fs_yx_fsv16 || _tensor.GetLayout() == DataLayout::b_fs_yx_fsv32 ||
+            _tensor.GetLayout() == DataLayout::b_fs_zyx_fsv16) {
             definitions.push_back({_name + "_X_PITCH", "1"});
             definitions.push_back({_name + "_Y_PITCH", dims_padded.x()});
             definitions.push_back({_name + "_Z_PITCH", toVectorMulString({dims_padded.x(), dims_padded.y()})});
@@ -691,12 +693,12 @@ class WeightTensorJitConstant : public TensorBaseTJitConstant<WeightsType, Weigh
                 this->macroName = MacroName(tensor_name, layout_name, macroNameArgs);
                 this->macroBody = R"V0G0N( \
     CAT(prefix, _OFFSET) + \
-    (x)*CAT(prefix, _X_PITCH) + \
-    (y)*CAT(prefix, _Y_PITCH) + \
-    (z)*CAT(prefix, _Z_PITCH) + \
-    (i)*CAT(prefix, _IFM_PITCH) + \
-    (o)*CAT(prefix, _OFM_PITCH) + \
-    (g)*CAT(prefix, _GROUPS_PITCH)
+    ((x) % CAT(prefix, _SIZE_X)) * CAT(prefix, _X_PITCH) + \
+    ((y) % CAT(prefix, _SIZE_Y)) * CAT(prefix, _Y_PITCH) + \
+    ((z) % CAT(prefix, _SIZE_Z)) * CAT(prefix, _Z_PITCH) + \
+    ((i) % CAT(prefix, _IFM_NUM)) *CAT(prefix, _IFM_PITCH) + \
+    ((o) % CAT(prefix, _OFM_NUM)) * CAT(prefix, _OFM_PITCH) + \
+    ((g) % CAT(prefix, _GROUPS_NUM)) * CAT(prefix, _GROUPS_PITCH)
                 )V0G0N";
             } else if (l == WeightsLayout::os_is_yx_isv16_osv16 || l == WeightsLayout::os_is_zyx_isv16_osv16 ||
                        l == WeightsLayout::g_os_is_yx_isv16_osv16 || l == WeightsLayout::g_os_is_zyx_isv16_osv16) {
@@ -1435,7 +1437,6 @@ JitConstants MakeTypeJitConstants(Datatype dataType, const std::string& macroNam
             is_fp = false;
             break;
         case Datatype::UINT32:
-        case Datatype::BINARY:
             type = "uint";
             max_val = "UINT_MAX";
             min_val = "0";
@@ -1490,6 +1491,15 @@ JitConstants MakeTypeJitConstants(Datatype dataType, const std::string& macroNam
             type_size = "0.5f";
             is_fp = false;
             break;
+        case Datatype::BF16:
+            type = "ushort";
+            val_one = "(ushort) 1";
+            val_zero = "(ushort) 0";
+            to_type = "_convert_bfloat16_as_ushort(v)";
+            to_type_sat = "_convert_bfloat16_as_ushort(v)";
+            type_size = "2";
+            is_fp = false;
+            break;
         default:
             type = "float";
             max_val = "FLT_MAX";
@@ -1539,10 +1549,10 @@ JitConstants MakeTypeJitConstants(WeightsType weightsType, const std::string& ma
             return MakeTypeJitConstants(Datatype::INT4, macroName);
         case WeightsType::UINT4:
             return MakeTypeJitConstants(Datatype::UINT4, macroName);
-        case WeightsType::BINARY:
-            return MakeTypeJitConstants(Datatype::UINT32, macroName);
         case WeightsType::INT32:
             return MakeTypeJitConstants(Datatype::INT32, macroName);
+        case WeightsType::BF16:
+            return MakeTypeJitConstants(Datatype::BF16, macroName);
     }
     assert(false || "Unreachable!");
     // FIXME: Is there some builtin_unreachable available?
@@ -1576,7 +1586,8 @@ JitConstants MakeActivationJitConstants(std::vector<kernel_selector::base_activa
                                         Datatype out_dt,
                                         const std::string& suffix,
                                         bool use_type_parameter,
-                                        bool disable_type_conversion) {
+                                        bool disable_type_conversion,
+                                        bool convert_input_to_output_dt) {
     JitConstants res = {};
     if (params.empty()) {
         return MakeActivationJitConstants({ActivationFunction::NONE, 0.f, 0.f}, out_dt,
@@ -1605,7 +1616,14 @@ JitConstants MakeActivationJitConstants(std::vector<kernel_selector::base_activa
 
         if (i == 0) {
             activation_params = use_type_parameter ? "(jit_type, input, params)" : "(input, params)";
-            res_activation = "ACTIVATION_FUNC" + activation_suffix + activation_params;
+            if (convert_input_to_output_dt) {
+                // Convert the input to the output data type to fix that cl kernel build failed for an ambiguous issue of the fmax/fmin functions
+                // occurring by the different data types between input and output.
+                res_activation = "ACTIVATION_FUNC" + activation_suffix
+                                + "(" + (use_type_parameter? "jit_type, ":"") + "convert_" + toCLType(out_dt) + "(input), params)";
+            } else {
+                res_activation = "ACTIVATION_FUNC" + activation_suffix + activation_params;
+            }
         } else {
             res_activation = "ACTIVATION" + activation_suffix + "(" + (use_type_parameter ? "jit_type, " : "") +
                              res_activation + ", ACTIVATION_PARAMS" + activation_suffix + ")";
@@ -1704,13 +1722,16 @@ JitConstants FusedOpsCodeGenerator::MakeInputDeclsJitConstants(const FusedOpsCon
     JitConstants jit = {};
 
     std::string input_decls = "";
+    std::string input_args = "";
     for (size_t op_input_id = 0; op_input_id < desc.tensors.size(); op_input_id++) {
         std::string ptr_name = GetInputPtrName(op_input_id);
         input_decls += "\\\n\tconst __global " + toCLType(desc.tensors[op_input_id].GetDType()) +
                        "* " + ptr_name + (op_input_id == desc.tensors.size() - 1 ? "" : ",");
+        input_args += "\\\n\t" + ptr_name + (op_input_id == desc.tensors.size() - 1 ? "" : ",");
     }
 
     jit.AddConstant(MakeJitConstant("FUSED_OP" + toCodeString(desc.op_id) + "_DECLS", input_decls));
+    jit.AddConstant(MakeJitConstant("FUSED_OP" + toCodeString(desc.op_id) + "_ARGS", input_args));
     return jit;
 }
 
@@ -2113,7 +2134,7 @@ std::string FusedOpsCodeGenerator::GetJitLoad(const FusedOpsConfiguration& conf,
     if (desc.GetType() == KernelType::ELTWISE &&
         conf.load_type == FusedOpsConfiguration::LoadType::LT_ALIGNED_READ &&
         ((input_tensor.SimpleLayout() && input_tensor.GetLayout() != orig_output_layout) || f_axis_broadcast) &&
-        (input_tensor.SameDimsSizes(prim_output) || f_axis_broadcast) &&
+        (!input_tensor.SimpleLayout() && (input_tensor.SameDimsSizes(prim_output) || f_axis_broadcast)) &&
         input_tensor.LogicalSize() != 1) {
         std::string sub_group_local_id_str = "get_sub_group_local_id";
         size_t found_sub = conf.bfzyx_idx_order[1].rfind(sub_group_local_id_str);
@@ -2177,7 +2198,21 @@ std::string FusedOpsCodeGenerator::GetJitLoad(const FusedOpsConfiguration& conf,
 
             if (vec_size > 1) {
                 return block_read;
-            } else if (input_tensor.LogicalSize() > 1) {
+            }
+
+            bool multiple_elements = false;
+            // For dynamic shape input tensor, check any one of static dimension has more than one element.
+            if (input_tensor.is_dynamic()) {
+                for (auto dim : input_tensor.GetDims()) {
+                    auto v = dim.v;
+                    if (v > 1) {
+                        multiple_elements = true;
+                        break;
+                    }
+                }
+            }
+
+            if (input_tensor.LogicalSize() > 1 || multiple_elements) {
                 // Currently we assume that in such scenario we can safely load sub_group_size elements from the pointer
                 return Broadcast(block_read, input_dt, vec_size);
             } else {

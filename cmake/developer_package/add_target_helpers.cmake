@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -160,7 +160,7 @@ function(ov_add_test_target)
         set(JS_BIN_NAME "${ARG_NAME}.js")
         set(JS_APP_NAME "${ARG_NAME}_js.js")
         set(JS_TEST_APP "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${JS_APP_NAME}")
-        file(WRITE   ${JS_TEST_APP} "// Copyright (C) 2018-2023 Intel Corporation\n")
+        file(WRITE   ${JS_TEST_APP} "// Copyright (C) 2018-2025 Intel Corporation\n")
         file(APPEND  ${JS_TEST_APP} "// SPDX-License-Identifier: Apache-2.0\n")
         file(APPEND  ${JS_TEST_APP} "//\n")
         file(APPEND  ${JS_TEST_APP} "// JS test app\n")
@@ -180,16 +180,4 @@ function(ov_add_test_target)
             RUNTIME DESTINATION tests
             COMPONENT ${ARG_COMPONENT}
             EXCLUDE_FROM_ALL)
-endfunction()
-
-# deprecated
-
-function(addIeTarget)
-    message(WARNING "'addIeTarget' is deprecated, please, use 'ov_add_target' instead")
-    ov_add_target(${ARGV})
-endfunction()
-
-function(addIeTargetTest)
-    message(WARNING "'addIeTargetTest' is deprecated, please, use 'ov_add_test_target' instead")
-    ov_add_test_target(${ARGV})
 endfunction()

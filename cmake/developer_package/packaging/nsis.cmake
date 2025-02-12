@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -54,14 +54,11 @@ macro(ov_archive_cpack_set_dirs)
     # common "archive" package locations
     # TODO: move current variables to OpenVINO specific locations
     set(OV_CPACK_INCLUDEDIR runtime/include)
-    set(OV_CPACK_IE_CMAKEDIR runtime/cmake)
-    set(OV_CPACK_NGRAPH_CMAKEDIR runtime/cmake)
     set(OV_CPACK_OPENVINO_CMAKEDIR runtime/cmake)
     set(OV_CPACK_DOCDIR docs)
     set(OV_CPACK_LICENSESDIR licenses)
     set(OV_CPACK_SAMPLESDIR samples)
-    set(OV_CPACK_WHEELSDIR tools)
-    set(OV_CPACK_TOOLSDIR tools)
+    set(OV_CPACK_WHEELSDIR wheels)
     set(OV_CPACK_DEVREQDIR tools)
     set(OV_CPACK_PYTHONDIR python)
 
@@ -90,6 +87,20 @@ endmacro()
 ov_nsis_cpack_set_dirs()
 
 #
+# Override CPack components name for NSIS generator
+# This is needed to change the granularity, i.e. merge several components
+# into a single one
+#
+
+macro(ov_override_component_names)
+    # merge links and pkgconfig with dev component
+    set(OV_CPACK_COMP_LINKS "${OV_CPACK_COMP_CORE_DEV}")
+    set(OV_CPACK_COMP_PKG_CONFIG "${OV_CPACK_COMP_CORE_DEV}")
+endmacro()
+
+ov_override_component_names()
+
+#
 # Override include / exclude rules for components
 # This is required to exclude some files from installation
 # (e.g. NSIS packages don't require wheels to be packacged)
@@ -101,6 +112,11 @@ macro(ov_define_component_include_rules)
     unset(OV_CPACK_COMP_CORE_C_EXCLUDE_ALL)
     unset(OV_CPACK_COMP_CORE_DEV_EXCLUDE_ALL)
     unset(OV_CPACK_COMP_CORE_C_DEV_EXCLUDE_ALL)
+    # tbb
+    unset(OV_CPACK_COMP_TBB_EXCLUDE_ALL)
+    unset(OV_CPACK_COMP_TBB_DEV_EXCLUDE_ALL)
+    # openmp
+    unset(OV_CPACK_COMP_OPENMP_EXCLUDE_ALL)
     # licensing
     unset(OV_CPACK_COMP_LICENSING_EXCLUDE_ALL)
     # samples
@@ -114,12 +130,17 @@ macro(ov_define_component_include_rules)
     set(OV_CPACK_COMP_PYTHON_WHEELS_EXCLUDE_ALL EXCLUDE_FROM_ALL)
     set(OV_CPACK_COMP_PYTHON_OPENVINO_PACKAGE_EXCLUDE_ALL EXCLUDE_FROM_ALL)
     unset(OV_CPACK_COMP_OPENVINO_REQ_FILES_EXCLUDE_ALL)
-    # tools
-    unset(OV_CPACK_COMP_OPENVINO_DEV_REQ_FILES_EXCLUDE_ALL)
-    unset(OV_CPACK_COMP_DEPLOYMENT_MANAGER_EXCLUDE_ALL)
+    # nodejs
+    set(OV_CPACK_COMP_NPM_EXCLUDE_ALL EXCLUDE_FROM_ALL)
     # scripts
     unset(OV_CPACK_COMP_INSTALL_DEPENDENCIES_EXCLUDE_ALL)
     unset(OV_CPACK_COMP_SETUPVARS_EXCLUDE_ALL)
+    # pkgconfig
+    set(OV_CPACK_COMP_PKG_CONFIG_EXCLUDE_ALL ${OV_CPACK_COMP_CORE_DEV_EXCLUDE_ALL})
+    # symbolic links
+    set(OV_CPACK_COMP_LINKS_EXCLUDE_ALL ${OV_CPACK_COMP_CORE_DEV_EXCLUDE_ALL})
+    # npu internal tools
+    set(OV_CPACK_COMP_NPU_INTERNAL_EXCLUDE_ALL EXCLUDE_FROM_ALL)
 endmacro()
 
 ov_define_component_include_rules()

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -114,6 +114,29 @@ struct loop : public primitive_base<loop> {
             ib >> end;
             ib >> stride;
         }
+
+        std::string to_string() const {
+            std::stringstream ss;
+            ss << "io_primitive_map " << std::endl;
+            ss << "* external_id    : " << external_id.to_string() << std::endl;
+            ss << "* internal_id    : " << internal_id.to_string() << std::endl;
+            ss << "* axis           : " << axis << std::endl;
+            ss << "* start          : " << start << std::endl;
+            ss << "* end            : " << end << std::endl;
+            ss << "* stride         : " << stride << std::endl;
+            return ss.str();
+        }
+
+        std::string to_short_string() const {
+            std::stringstream ss;
+            ss << "io_primitive_map[e:" << external_id.to_string();
+            ss << "," << internal_id.to_string();
+            ss << "," << axis;
+            ss << "," << start;
+            ss << "," << end;
+            ss << "," << stride << "]";
+            return ss.str();
+        }
     };
 
     struct backedge_mapping {
@@ -160,7 +183,6 @@ struct loop : public primitive_base<loop> {
     ///                               data primitive will be added in the body network.
     /// @param primitive_map Rules to map input of loop or output of body topology to input of the body topology
     /// @param back_edges Output data primitive id.
-    /// @param output_padding     Optional padding for output from primitive.
     loop(const primitive_id& id,
          const std::vector<input_info>& inputs,
          const program::ptr body_program,
@@ -174,7 +196,7 @@ struct loop : public primitive_base<loop> {
          const primitive_id& body_current_iteration_id = primitive_id(),
          const primitive_id& body_execution_condition_id = primitive_id(),
          const size_t num_outputs = 1)
-            : primitive_base(id, inputs, {padding()}, {optional_data_type()}, num_outputs),
+            : primitive_base(id, inputs, num_outputs, {optional_data_type()}),
               body_program(std::move(body_program)),
               trip_count_id(trip_count_id),
               first_execution_condition_id(first_execution_condition_id),
@@ -223,6 +245,7 @@ struct loop : public primitive_base<loop> {
 
     void save(BinaryOutputBuffer& ob) const override {
         primitive_base<loop>::save(ob);
+        body_program->save(ob);
         ob << trip_count_id;
         ob << first_execution_condition_id;
         ob << num_iteration_id;
@@ -236,6 +259,8 @@ struct loop : public primitive_base<loop> {
 
     void load(BinaryInputBuffer& ib) override {
         primitive_base<loop>::load(ib);
+        body_program = std::make_shared<cldnn::program>(ib.get_engine());
+        body_program->load(ib);
         ib >> trip_count_id;
         ib >> first_execution_condition_id;
         ib >> num_iteration_id;
@@ -248,19 +273,15 @@ struct loop : public primitive_base<loop> {
     }
 
 protected:
-    std::vector<std::reference_wrapper<const primitive_id>> get_dependencies() const override {
-        std::vector<std::reference_wrapper<const primitive_id>> ret;
-        ret.push_back(std::ref(num_iteration_id));
-        if (!trip_count_id.empty()) ret.push_back(std::ref(trip_count_id));
-        if (!first_execution_condition_id.empty()) ret.push_back(std::ref(first_execution_condition_id));
-
+    std::vector<input_info> get_dependencies() const override {
+        std::vector<input_info> ret;
         // add external_id in dependencies if not exist
         for (const auto& mapping : input_primitive_maps) {
             auto target = std::find_if(input.begin(), input.end(),
                                     [&](const input_info& info) {
                                         return info.pid == mapping.external_id.pid;});
             if (target == input.end()) {
-                ret.push_back(std::ref(mapping.external_id.pid));
+                ret.push_back(mapping.external_id.pid);
             }
         }
         return ret;

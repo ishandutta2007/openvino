@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -93,9 +93,7 @@ void op::v3::EmbeddingSegmentsSum::validate_and_infer_types() {
                               ")");
     }
     const auto& result_et = get_input_element_type(EMB_TABLE);
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    const auto input_shapes = get_node_input_partial_shapes(*this);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    const auto input_shapes = ov::util::get_node_input_partial_shapes(*this);
     const auto result_shapes = shape_infer(this, input_shapes);
 
     if (result_shapes[EMB_TABLE].rank().is_dynamic() || result_shapes[EMB_TABLE][0].is_dynamic()) {

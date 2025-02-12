@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -215,3 +215,5 @@ _OPENVINO_OP_REG(BitwiseOr, ov::op::v13)
 _OPENVINO_OP_REG(BitwiseXor, ov::op::v13)
 _OPENVINO_OP_REG(NMSRotated, ov::op::v13)
 _OPENVINO_OP_REG(Multinomial, ov::op::v13)
+_OPENVINO_OP_REG(ScaledDotProductAttention, ov::op::v13)
+_OPENVINO_OP_REG(FakeConvert, ov::op::v13)

@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -48,11 +48,7 @@ if(ENABLE_TESTS)
 
         ov_set_threading_interface_for(${OBJ_NAME})
 
-        target_compile_definitions(${OBJ_NAME}
-            PRIVATE
-                USE_STATIC_IE IMPLEMENT_INFERENCE_ENGINE_PLUGIN IMPLEMENT_INFERENCE_EXTENSION_API
-                $<TARGET_PROPERTY:ngraph,INTERFACE_COMPILE_DEFINITIONS>
-                $<TARGET_PROPERTY:inference_engine_plugin_api,INTERFACE_COMPILE_DEFINITIONS>)
+        target_compile_definitions(${OBJ_NAME} PRIVATE USE_STATIC_IE IMPLEMENT_OPENVINO_RUNTIME_PLUGIN)
     endif()
 
     add_subdirectory(tests)

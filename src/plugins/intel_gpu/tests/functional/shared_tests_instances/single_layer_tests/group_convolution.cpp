@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -82,7 +82,7 @@ const auto groupConv2DParams_ExplicitPadding = ::testing::Combine(
         ::testing::ValuesIn(dilations),
         ::testing::ValuesIn(numOutChannels),
         ::testing::ValuesIn(numGroups),
-        ::testing::Values(ngraph::op::PadType::EXPLICIT)
+        ::testing::Values(ov::op::PadType::EXPLICIT)
 );
 const auto groupConv2DParams_AutoPadValid = ::testing::Combine(
         ::testing::ValuesIn(kernels),
@@ -92,7 +92,17 @@ const auto groupConv2DParams_AutoPadValid = ::testing::Combine(
         ::testing::ValuesIn(dilations),
         ::testing::ValuesIn(numOutChannels),
         ::testing::ValuesIn(numGroups),
-        ::testing::Values(ngraph::op::PadType::VALID)
+        ::testing::Values(ov::op::PadType::VALID)
+);
+const auto groupConv2DParams_AutoPadSameUpper = ::testing::Combine(
+        ::testing::Values(std::vector<size_t >({1, 5})),
+        ::testing::ValuesIn(strides),
+        ::testing::Values(std::vector<ptrdiff_t>({0, 0})),
+        ::testing::Values(std::vector<ptrdiff_t>({0, 0})),
+        ::testing::ValuesIn(dilations),
+        ::testing::Values(80),
+        ::testing::Values(80),
+        ::testing::Values(ov::op::PadType::SAME_UPPER)
 );
 
 INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolution2D_ExplicitPadding, GroupConvolutionLayerTest,
@@ -113,6 +123,15 @@ INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolution2D_AutoPadValid, GroupConvolution
                                 ::testing::Values(ov::test::utils::DEVICE_GPU)),
                         GroupConvolutionLayerTest::getTestCaseName);
 
+INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolution2D_AutoPadSameUpper, GroupConvolutionLayerTest,
+                        ::testing::Combine(
+                                groupConv2DParams_AutoPadSameUpper,
+                                ::testing::ValuesIn(netPrecisions),
+                                ::testing::ValuesIn(ov::test::static_shapes_to_test_representation(
+                                        std::vector<std::vector<ov::Shape>>({{{1, 80, 1, 1008}}}))),
+                                ::testing::Values(ov::test::utils::DEVICE_GPU)),
+                        GroupConvolutionLayerTest::getTestCaseName);
+
 /* ============= 3D GroupConvolution ============= */
 const std::vector<std::vector<size_t >> kernels3d = {{3, 3, 3}};
 const std::vector<std::vector<ptrdiff_t>> paddings3d = {{0, 0, 0}};
@@ -128,7 +147,7 @@ const auto groupConv3DParams_ExplicitPadding = ::testing::Combine(
         ::testing::ValuesIn(dilations3d),
         ::testing::Values(4),
         ::testing::Values(2),
-        ::testing::Values(ngraph::op::PadType::EXPLICIT)
+        ::testing::Values(ov::op::PadType::EXPLICIT)
 );
 const auto groupConv3DParams_AutoPadValid = ::testing::Combine(
         ::testing::ValuesIn(kernels3d),
@@ -138,7 +157,7 @@ const auto groupConv3DParams_AutoPadValid = ::testing::Combine(
         ::testing::ValuesIn(dilations3d),
         ::testing::Values(4),
         ::testing::Values(2),
-        ::testing::Values(ngraph::op::PadType::VALID)
+        ::testing::Values(ov::op::PadType::VALID)
 );
 
 INSTANTIATE_TEST_SUITE_P(smoke_GroupConvolution3D_ExplicitPadding, GroupConvolutionLayerTest,

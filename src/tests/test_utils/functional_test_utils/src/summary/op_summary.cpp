@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -28,14 +28,13 @@ void OpSummaryDestroyer::initialize(OpSummary* p) {
     p_instance = p;
 }
 
-OpSummary::OpSummary(unsigned short int in_downgrade_coefficient) {
+OpSummary::OpSummary() {
     reportFilename = ov::test::utils::OP_REPORT_FILENAME;
-    downgrade_coefficient = in_downgrade_coefficient;
 }
 
-OpSummary& OpSummary::createInstance(unsigned short int in_downgrade_coefficient) {
+OpSummary& OpSummary::createInstance() {
     if (!p_instance) {
-        p_instance = new OpSummary(in_downgrade_coefficient);
+        p_instance = new OpSummary();
         destroyer.initialize(p_instance);
     }
     return *p_instance;
@@ -43,13 +42,6 @@ OpSummary& OpSummary::createInstance(unsigned short int in_downgrade_coefficient
 
 OpSummary& OpSummary::getInstance() {
     return createInstance();
-}
-
-void OpSummary::setDowngradeCoefficient(unsigned short int in_downgrade_coefficient) {
-    if (p_instance && p_instance->downgrade_coefficient != in_downgrade_coefficient) {
-        p_instance->downgrade_coefficient = in_downgrade_coefficient;
-    }
-    auto& summary_instance = createInstance(in_downgrade_coefficient);
 }
 
 void OpSummary::updateOPsStats(const ov::NodeTypeInfo& op,
@@ -60,15 +52,15 @@ void OpSummary::updateOPsStats(const ov::NodeTypeInfo& op,
         opsStats.insert({op, PassRate()});
     }
     auto& passrate = opsStats[op];
-    if (isCrashReported) {
-        isCrashReported = false;
+    if (passrate.isCrashReported) {
+        passrate.isCrashReported = false;
         if (passrate.crashed > 0)
             passrate.crashed--;
     } else {
         passrate.rel_all += rel_influence_coef;
     }
-    if (isHangReported) {
-        isHangReported = false;
+    if (passrate.isHangReported) {
+        passrate.isHangReported = false;
         return;
     }
     switch (status) {
@@ -87,12 +79,12 @@ void OpSummary::updateOPsStats(const ov::NodeTypeInfo& op,
         break;
     case PassRate::CRASHED: {
         passrate.crashed++;
-        isCrashReported = true;
+        passrate.isCrashReported = true;
         break;
     }
     case PassRate::HANGED: {
         passrate.hanged++;
-        isHangReported = true;
+        passrate.isHangReported = true;
         break;
     }
     }
@@ -149,14 +141,10 @@ std::map<std::string, PassRate> OpSummary::getStatisticFromReport() {
 }
 
 void OpSummary::updateOPsStats(const std::shared_ptr<ov::Model>& model, const PassRate::Statuses& status, double k) {
-    if (model->get_parameters().empty()) {
-        return;
-    }
     bool isFunctionalGraph = false;
     for (const auto& op : model->get_ordered_ops()) {
-        if (!std::dynamic_pointer_cast<ov::op::v0::Parameter>(op) &&
-            !std::dynamic_pointer_cast<ov::op::v0::Constant>(op) &&
-            !std::dynamic_pointer_cast<ov::op::v0::Result>(op)) {
+        if (!ov::as_type_ptr<ov::op::v0::Parameter>(op) && !ov::as_type_ptr<ov::op::v0::Constant>(op) &&
+            !ov::as_type_ptr<ov::op::v0::Result>(op)) {
             // find all features
             isFunctionalGraph = true;
             break;
@@ -164,24 +152,23 @@ void OpSummary::updateOPsStats(const std::shared_ptr<ov::Model>& model, const Pa
     }
 
     for (const auto& op : model->get_ordered_ops()) {
-        if ((std::dynamic_pointer_cast<ov::op::v0::Parameter>(op) ||
-             std::dynamic_pointer_cast<ov::op::v0::Constant>(op) ||
-             std::dynamic_pointer_cast<ov::op::v0::Result>(op)) &&
+        if ((ov::as_type_ptr<ov::op::v0::Parameter>(op) || ov::as_type_ptr<ov::op::v0::Constant>(op) ||
+             ov::as_type_ptr<ov::op::v0::Result>(op)) &&
             isFunctionalGraph) {
             continue;
         }
         if (extractBody) {
-            if (std::dynamic_pointer_cast<ov::op::v0::TensorIterator>(op)) {
+            if (ov::as_type_ptr<ov::op::v0::TensorIterator>(op)) {
                 updateOPsStats(op->get_type_info(), status, k);
                 auto ti = ov::as_type_ptr<ov::op::v0::TensorIterator>(op);
                 auto ti_body = ti->get_function();
                 updateOPsStats(ti_body, status, k);
-            } else if (std::dynamic_pointer_cast<ov::op::v5::Loop>(op)) {
+            } else if (ov::as_type_ptr<ov::op::v5::Loop>(op)) {
                 updateOPsStats(op->get_type_info(), status, k);
                 auto loop = ov::as_type_ptr<ov::op::v5::Loop>(op);
                 auto loop_body = loop->get_function();
                 updateOPsStats(loop_body, status, k);
-            } else if (std::dynamic_pointer_cast<ov::op::v8::If>(op)) {
+            } else if (ov::as_type_ptr<ov::op::v8::If>(op)) {
                 updateOPsStats(op->get_type_info(), status, k);
                 auto if_op = ov::as_type_ptr<ov::op::v8::If>(op);
                 std::vector<std::shared_ptr<ov::Model>> bodies;
@@ -201,26 +188,24 @@ void OpSummary::updateOPsImplStatus(const std::shared_ptr<ov::Model>& model, con
     }
     bool isFunctionalGraph = false;
     for (const auto& op : model->get_ordered_ops()) {
-        if (!std::dynamic_pointer_cast<ov::op::v0::Parameter>(op) &&
-            !std::dynamic_pointer_cast<ov::op::v0::Constant>(op) &&
-            !std::dynamic_pointer_cast<ov::op::v0::Result>(op)) {
+        if (!ov::as_type_ptr<ov::op::v0::Parameter>(op) && !ov::as_type_ptr<ov::op::v0::Constant>(op) &&
+            !ov::as_type_ptr<ov::op::v0::Result>(op)) {
             isFunctionalGraph = true;
             break;
         }
     }
 
     for (const auto& op : model->get_ordered_ops()) {
-        if ((std::dynamic_pointer_cast<ov::op::v0::Parameter>(op) ||
-             std::dynamic_pointer_cast<ov::op::v0::Constant>(op) ||
-             std::dynamic_pointer_cast<ov::op::v0::Result>(op)) &&
+        if ((ov::as_type_ptr<ov::op::v0::Parameter>(op) || ov::as_type_ptr<ov::op::v0::Constant>(op) ||
+             ov::as_type_ptr<ov::op::v0::Result>(op)) &&
             isFunctionalGraph) {
             continue;
-        } else if (std::dynamic_pointer_cast<ov::op::v0::TensorIterator>(op)) {
+        } else if (ov::as_type_ptr<ov::op::v0::TensorIterator>(op)) {
             updateOPsImplStatus(op->get_type_info(), implStatus);
             auto ti = ov::as_type_ptr<ov::op::v0::TensorIterator>(op);
             auto ti_body = ti->get_function();
             updateOPsImplStatus(ti_body, implStatus);
-        } else if (std::dynamic_pointer_cast<ov::op::v5::Loop>(op)) {
+        } else if (ov::as_type_ptr<ov::op::v5::Loop>(op)) {
             updateOPsImplStatus(op->get_type_info(), implStatus);
             auto loop = ov::as_type_ptr<ov::op::v5::Loop>(op);
             auto loop_body = loop->get_function();
@@ -247,8 +232,8 @@ void OpSummary::saveReport() {
     }
     filename += ov::test::utils::REPORT_EXTENSION;
 
-    if (!ov::test::utils::directoryExists(outputFolder)) {
-        ov::test::utils::createDirectoryRecursive(outputFolder);
+    if (!ov::util::directory_exists(outputFolder)) {
+        ov::util::create_directory_recursive(outputFolder);
     }
 
     std::string outputFilePath = outputFolder + std::string(ov::test::utils::FileSeparator) + filename;
@@ -313,9 +298,6 @@ void OpSummary::saveReport() {
     pugi::xml_node currentDeviceNode = resultsNode.append_child(summary.deviceName.c_str());
     std::unordered_set<std::string> opList;
     for (auto& it : stats) {
-        it.second.rel_passed /= downgrade_coefficient;
-        it.second.rel_all /= downgrade_coefficient;
-
         std::string name = functional::get_node_version(it.first);
         opList.insert(name);
         pugi::xml_node entry = currentDeviceNode.append_child(name.c_str());

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,12 +6,13 @@
 
 #include <memory>
 
-
+#include "itt.hpp"
+#include "openvino/util/log.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
-#include "low_precision/network_helper.hpp"
 #include "openvino/op/util/pad_base.hpp"
 #include "openvino/opsets/opset12.hpp"
-#include "itt.hpp"
+
+#include "low_precision/network_helper.hpp"
 
 namespace ov {
 namespace pass {
@@ -30,7 +31,7 @@ PadTransformation::PadTransformation(const Params& params) : LayerTransformation
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(matcher, matcher_name);
@@ -49,8 +50,8 @@ namespace {
     }
 } // namespace
 
-bool PadTransformation::transform(TransformationContext& context, ov::pass::pattern::Matcher& m) {
-    if (!canBeTransformed(context, m.get_match_root())) {
+bool PadTransformation::transform(ov::pass::pattern::Matcher& m) {
+    if (!canBeTransformed(m.get_match_root())) {
         return false;
     }
 
@@ -163,13 +164,14 @@ bool PadTransformation::transform(TransformationContext& context, ov::pass::patt
     const auto convertedZero = ov::opset1::Constant::create(dequantization.data.get_element_type(), Shape{}, { padConstantValue });
     pad->set_argument(3, convertedZero);
 
-    moveDequantizationAfter(context, pad, dequantization, true);
+    const auto newOperation = moveDequantizationAfter(pad, dequantization);
 
+    OPENVINO_DEBUG("LPT: done: ", newOperation);
     return true;
 }
 
-bool PadTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> op) const {
-    if (!LayerTransformation::canBeTransformedSpatialDimension(context, op)) {
+bool PadTransformation::canBeTransformed(const std::shared_ptr<Node>& op) const {
+    if (!LayerTransformation::canBeTransformedSpatialDimension(op)) {
         return false;
     }
 
@@ -221,6 +223,10 @@ bool PadTransformation::canBeTransformed(const TransformationContext& context, s
                 if (padsEnd[i] != 0) {
                     endNonZeroIdx = static_cast<int>(i);
                 }
+            }
+
+            if ((beginNonZeroIdx == -1) && (endNonZeroIdx == -1)) {
+                return true;
             }
 
             if ((beginNonZeroIdx != endNonZeroIdx) && (beginNonZeroIdx != -1) && (endNonZeroIdx != -1)) {

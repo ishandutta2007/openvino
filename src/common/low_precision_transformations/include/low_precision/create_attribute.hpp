@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "openvino/pass/graph_rewrite.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 #include "low_precision/lpt_visibility.hpp"
 #include "low_precision/base_matcher_pass.hpp"
@@ -31,11 +30,11 @@ enum class AttributeSource {
 };
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief CreateAttribute transformation marks OperationType operations by AttributeType attribute.
  *
  * For more details about the transformation, refer to
- * [CreateAttribute](@ref openvino_docs_OV_UG_lpt_CreateAttribute) page in the Inference Engine Developer Guide.
+ * [CreateAttribute](@ref openvino_docs_OV_UG_lpt_CreateAttribute) page in the OpenVINO Developer Guide.
  */
 template <typename AttributeType, typename OperationType = ov::pass::pattern::op::Label>
 class ov::pass::low_precision::CreateAttribute : public ov::pass::low_precision::BaseMatcherPass {

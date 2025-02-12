@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -194,5 +194,239 @@ TEST_F(TransformationTestsF, GroupedGatherEliminationNegative) {
         auto reshape = std::make_shared<opset7::Reshape>(data, concat, true);
         model = std::make_shared<Model>(NodeVector{reshape}, ParameterVector{data});
         manager.register_pass<ov::pass::GroupedGatherElimination>();
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationNotCompatibleIndiciesSameSign) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::i32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::i32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto convert_1 = std::make_shared<opset7::Convert>(indices_1, element::i64);
+        auto joint_indices = std::make_shared<opset7::Concat>(OutputVector{convert_1, indices_2}, 0);
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+
+        auto gather = std::make_shared<opset8::Gather>(shape_op, joint_indices, axis);
+
+        model_ref = std::make_shared<Model>(NodeVector{gather}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationNotCompatibleIndiciesCanConvert_1) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::u32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::u32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto convert_1 = std::make_shared<opset7::Convert>(indices_1, element::i64);
+        auto joint_indices = std::make_shared<opset7::Concat>(OutputVector{convert_1, indices_2}, 0);
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+
+        auto gather = std::make_shared<opset8::Gather>(shape_op, joint_indices, axis);
+
+        model_ref = std::make_shared<Model>(NodeVector{gather}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationNotCompatibleIndiciesCanConvert_2) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::u32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i32, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto indices_1 = opset7::Constant::create(element::u32, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i32, {1}, {1});
+        auto convert_1 = std::make_shared<opset7::Convert>(indices_1, element::i64);
+        auto convert_2 = std::make_shared<opset7::Convert>(indices_2, element::i64);
+        auto joint_indices = std::make_shared<opset7::Concat>(OutputVector{convert_1, convert_2}, 0);
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+
+        auto gather = std::make_shared<opset8::Gather>(shape_op, joint_indices, axis);
+
+        model_ref = std::make_shared<Model>(NodeVector{gather}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationCompatibleIndicies_1) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::i64, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto joint_indices = opset7::Constant::create(element::i64, {2}, {1, 1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+
+        auto gather = std::make_shared<opset8::Gather>(shape_op, joint_indices, axis);
+
+        model_ref = std::make_shared<Model>(NodeVector{gather}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationCompatibleIndicies_2) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::u64, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::u64, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto joint_indices = opset7::Constant::create(element::u64, {2}, {1, 1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+
+        auto gather = std::make_shared<opset8::Gather>(shape_op, joint_indices, axis);
+
+        model_ref = std::make_shared<Model>(NodeVector{gather}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, GroupedGatherEliminationNotCompatibleIndiciesCannotConvert) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        auto indices_1 = opset7::Constant::create(element::u64, {1}, {1});
+        auto indices_2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto axis = opset7::Constant::create(element::i64, {}, {0});
+        auto gather_1 = std::make_shared<opset8::Gather>(shape_op, indices_1, axis);
+        auto gather_2 = std::make_shared<opset8::Gather>(shape_op, indices_2, axis);
+
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather_1, gather_2}, 0);
+
+        model = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+        manager.register_pass<pass::GroupedGatherElimination>();
+    }
+}
+
+TEST_F(TransformationTestsF, ConcatAbsCombo) {
+    PartialShape shape = PartialShape::dynamic(4);
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto gather = gatherv8(shape_op, {0});
+
+        auto one = opset7::Constant::create(element::i64, {1}, {1});
+        auto minus_one = opset7::Constant::create(element::i64, {1}, {-1});
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather, minus_one, one, minus_one}, 0);
+        auto abs = std::make_shared<opset7::Abs>(concat);
+
+        model = std::make_shared<Model>(NodeVector{abs}, ParameterVector{data});
+        manager.register_pass<pass::AbsSinking>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto gather = gatherv8(shape_op, {0});
+
+        auto one0 = opset7::Constant::create(element::i64, {1}, {1});
+        auto one1 = opset7::Constant::create(element::i64, {1}, {1});
+        auto one2 = opset7::Constant::create(element::i64, {1}, {1});
+        auto concat = std::make_shared<opset7::Concat>(OutputVector{gather, one0, one1, one2}, 0);
+
+        model_ref = std::make_shared<Model>(NodeVector{concat}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, SingleAbsOnShape) {
+    PartialShape shape = PartialShape::dynamic(4);
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+        auto abs = std::make_shared<opset7::Abs>(shape_op);
+
+        model = std::make_shared<Model>(NodeVector{abs}, ParameterVector{data});
+        manager.register_pass<pass::AbsSinking>();
+    }
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, shape);
+        auto shape_op = std::make_shared<opset7::ShapeOf>(data);
+
+        model_ref = std::make_shared<Model>(OutputVector{shape_op}, ParameterVector{data});
+    }
+}
+
+TEST_F(TransformationTestsF, AbsInTheUnknown) {
+    PartialShape data_shape{2, 128};
+    {
+        auto data = std::make_shared<opset7::Parameter>(element::f32, data_shape);
+        auto abs = std::make_shared<opset7::Abs>(data);
+
+        model = std::make_shared<Model>(NodeVector{abs}, ParameterVector{data});
+        manager.register_pass<pass::AbsSinking>();
     }
 }

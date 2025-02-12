@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -15,7 +15,6 @@
 #include "ov_lpt_models/common/constant.hpp"
 #include "ov_lpt_models/common/dequantization_operations.hpp"
 #include "ov_lpt_models/mat_mul.hpp"
-#include "ov_models/subgraph_builders.hpp"
 #include "simple_low_precision_transformer.hpp"
 
 namespace {
@@ -28,24 +27,24 @@ public:
     class Actual {
     public:
         ov::element::Type precisionBeforeDequantization;
-        ngraph::builder::subgraph::DequantizationOperations dequantizationOnData;
+        ov::builder::subgraph::DequantizationOperations dequantizationOnData;
 
-        ngraph::builder::subgraph::Constant weights;
-        ngraph::builder::subgraph::FakeQuantizeOnWeights fqOnWeights;
-        ngraph::builder::subgraph::DequantizationOperations dequantizationOnWeights;
+        ov::builder::subgraph::Constant weights;
+        ov::builder::subgraph::FakeQuantizeOnWeights fqOnWeights;
+        ov::builder::subgraph::DequantizationOperations dequantizationOnWeights;
     };
 
     class Expected {
     public:
         ov::element::Type precisionBeforeDequantization;
-        ngraph::builder::subgraph::DequantizationOperations dequantizationOnData;
-        ngraph::builder::subgraph::Constant weights;
+        ov::builder::subgraph::DequantizationOperations dequantizationOnData;
+        ov::builder::subgraph::Constant weights;
 
         ov::element::Type precisionBeforeOperation;
-        ngraph::builder::subgraph::DequantizationOperations resultDequantization;
+        ov::builder::subgraph::DequantizationOperations resultDequantization;
 
-        ngraph::builder::subgraph::FakeQuantizeOnWeights fqOnWeights;
-        ngraph::builder::subgraph::DequantizationOperations dequantizationOnWeights;
+        ov::builder::subgraph::FakeQuantizeOnWeights fqOnWeights;
+        ov::builder::subgraph::DequantizationOperations dequantizationOnWeights;
     };
 
     TestTransformationParams params;
@@ -80,7 +79,7 @@ public:
         MatMullTransformationTestValues testValues = std::get<2>(GetParam());
 
         actualFunction =
-            ngraph::builder::subgraph::MatMulFunction::getOriginal(precision,
+            ov::builder::subgraph::MatMulFunction::getOriginal(precision,
                                                                    inputShape,
                                                                    testValues.actual.precisionBeforeDequantization,
                                                                    testValues.actual.dequantizationOnData,
@@ -94,14 +93,14 @@ public:
 
         referenceFunction =
             (testValues.expected.fqOnWeights.empty() && testValues.expected.dequantizationOnWeights.empty())
-                ? ngraph::builder::subgraph::MatMulFunction::getReference(
+                ? ov::builder::subgraph::MatMulFunction::getReference(
                       precision,
                       inputShape,
                       testValues.expected.precisionBeforeDequantization,
                       testValues.expected.dequantizationOnData,
                       testValues.expected.weights,
                       testValues.expected.resultDequantization)
-                : ngraph::builder::subgraph::MatMulFunction::getOriginal(
+                : ov::builder::subgraph::MatMulFunction::getOriginal(
                       precision,
                       inputShape,
                       testValues.expected.precisionBeforeDequantization,
@@ -153,6 +152,22 @@ std::vector<MatMullTransformationTestValues> testValues = {
      {ov::element::u8,
       {},
       {std::vector<float>(1024 * 1024, -126.f), ov::element::i8, ov::Shape{1024, 1024}},
+      ov::element::u8,
+      {{}, {}, {0.02f * 0.1f}},
+      {},
+      {}}},
+
+    // test: multiply with f16 constant
+    {LayerTransformation::createParamsU8I8(),
+     {ov::element::u8,
+      {ov::element::f32, {}, ov::builder::subgraph::DequantizationOperations::Multiply{0.02f}.setConstantPrecision(ov::element::f16)},
+      {std::vector<float>(1024 * 1024, 1.f), ov::element::i8, ov::Shape{1024, 1024}},
+      {},
+      {ov::element::f32, {}, {0.1f}},
+     },
+     {ov::element::u8,
+      {},
+      {std::vector<float>(1024 * 1024, 1.f), ov::element::i8, ov::Shape{1024, 1024}},
       ov::element::u8,
       {{}, {}, {0.02f * 0.1f}},
       {},

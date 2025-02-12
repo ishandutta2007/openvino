@@ -11,15 +11,14 @@ namespace pass {
 namespace low_precision {
 
 /**
- * @ingroup ie_transformation_common_api
+ * @ingroup ov_transformation_common_api
  * @brief Base class for cleanup low precision transformation.
  */
 class LP_TRANSFORMATIONS_API CleanupTransformation : public LayerTransformation {
 public:
     CleanupTransformation(const Params& params);
-    virtual ~CleanupTransformation() = default;
 
-    bool canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> layer) const override;
+    bool canBeTransformed(const std::shared_ptr<Node>& layer) const override;
     static bool canBeTransformedStatic(
         const std::shared_ptr<Node>& layer,
         const std::vector<ov::element::Type>& defaultPrecisions = precision_set::get_int8_support());

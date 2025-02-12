@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -12,6 +12,7 @@
 #include "openvino/core/shape_util.hpp"
 #include "openvino/op/parameter.hpp"
 #include "openvino/op/result.hpp"
+#include "openvino/op/util/multi_subgraph_base.hpp"
 #include "openvino/op/util/op_types.hpp"
 #include "openvino/op/util/variable_context.hpp"
 #include "perf_counter.hpp"
@@ -53,6 +54,24 @@ void ov::runtime::interpreter::INTExecutable::cancel() {
     m_cancel_execution = true;
 }
 
+void collect_variables(const ov::NodeVector& nodes, ov::op::util::VariableContext& variable_context) {
+    for (const auto& op : nodes) {
+        if (auto multi_subgraph_op = ov::as_type_ptr<ov::op::util::MultiSubGraphOp>(op)) {
+            for (const auto& sub_graph : multi_subgraph_op->get_functions()) {
+                collect_variables(sub_graph->get_ordered_ops(), variable_context);
+            }
+        }
+
+        if (auto var_extension = std::dynamic_pointer_cast<ov::op::util::VariableExtension>(op)) {
+            auto variable = var_extension->get_variable();
+            if (!variable_context.get_variable_value(variable)) {
+                auto h_tensor = ov::Tensor(op->get_output_element_type(0), op->get_output_shape(0));
+                variable_context.set_variable_value(variable, std::make_shared<ov::op::util::VariableValue>(h_tensor));
+            }
+        }
+    }
+}
+
 bool ov::runtime::interpreter::INTExecutable::call(std::vector<ov::Tensor>& outputs,
                                                    const std::vector<ov::Tensor>& inputs,
                                                    bool collect_performance) {
@@ -60,17 +79,7 @@ bool ov::runtime::interpreter::INTExecutable::call(std::vector<ov::Tensor>& outp
     ov::op::util::VariableContext variable_context;
     eval_context.emplace("VariableContext", variable_context);
 
-    // for each ordered op in the graph
-    for (const auto& op : m_nodes) {
-        if (auto var_extension = std::dynamic_pointer_cast<ov::op::util::VariableExtension>(op)) {
-            auto variable = var_extension->get_variable();
-            if (!variable_context.get_variable_value(variable)) {
-                auto h_tensor = ov::Tensor(op->get_input_element_type(0), op->get_input_shape(0));
-                variable_context.set_variable_value(variable, std::make_shared<ov::op::util::VariableValue>(h_tensor));
-            }
-        }
-    }
-
+    collect_variables(m_nodes, variable_context);
     return call(outputs, inputs, eval_context, collect_performance);
 }
 
@@ -109,7 +118,7 @@ bool ov::runtime::interpreter::INTExecutable::call(std::vector<ov::Tensor>& outp
     // for each ordered op in the graph
     for (const auto& op : m_nodes) {
         CHECK_TERMINATE()
-        if (std::dynamic_pointer_cast<ov::op::v0::Parameter>(op)) {
+        if (ov::as_type_ptr<ov::op::v0::Parameter>(op)) {
             continue;
         }
         // get op inputs from map
@@ -123,19 +132,13 @@ bool ov::runtime::interpreter::INTExecutable::call(std::vector<ov::Tensor>& outp
         std::vector<ov::Tensor> op_outputs;
         for (size_t i = 0; i < op->get_output_size(); ++i) {
             auto tensor = op->output(i).get_tensor_ptr();
-            ov::Tensor host_tensor;
             auto it = tensor_map.find(tensor);
             auto output = op->output(i);
             if (op::util::is_output(op) || it == tensor_map.end() || !it->second) {
-                OPENVINO_SUPPRESS_DEPRECATED_START
-                host_tensor = ov::Tensor(
-                    output.get_element_type(),
-                    output.get_partial_shape().is_dynamic() ? ov::util::make_dynamic_shape() : output.get_shape());
-                OPENVINO_SUPPRESS_DEPRECATED_END
+                op_outputs.emplace_back(output);
             } else {
-                host_tensor = it->second;
+                op_outputs.push_back(it->second);
             }
-            op_outputs.push_back(host_tensor);
         }
 
         {

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 #pragma once
@@ -8,13 +8,11 @@
 
 #include "element_visitor.hpp"
 #include "openvino/core/bound_evaluation_util.hpp"
-#include "openvino/core/deprecated.hpp"
 #include "openvino/core/validation_util.hpp"
 #include "openvino/opsets/opset1.hpp"
 #include "ov_optional.hpp"
 #include "shape_infer_type_utils.hpp"
 #include "tensor_data_accessor.hpp"
-#include "validation_util.hpp"
 
 namespace ov {
 
@@ -61,31 +59,6 @@ TResult get_raw_data_as(const element::Type_t et, const void* const ptr, const s
         std::forward<UnaryOperation>(func));
     return out;
 }
-
-OPENVINO_SUPPRESS_DEPRECATED_START
-/**
- * \brief Get data from Host tensor as object TResult.
- *
- * \tparam T               TResult data type.
- * \tparam TResult         Type of return object, must support creation of std::inserter. Default std::vector<T>.
- * \tparam UnaryOperation  Unary function object applied on data with signature (T f(const U u)).
- *
- * \param tv    Input host tensor.
- * \param func  Unary operation function object.
- *
- * \return Object of TResult with data from host tensor.
- */
-template <class T, class TResult = std::vector<T>, class UnaryOperation>
-TResult get_tensor_data_as(ngraph::HostTensor& tv, UnaryOperation&& func) {
-    auto t = Tensor(tv.get_element_type(), tv.get_shape(), tv.get_data_ptr());
-    return get_tensor_data_as<T, TResult>(t, std::forward<UnaryOperation>(func));
-}
-
-template <class T, class TResult = std::vector<T>, class UnaryOperation>
-TResult get_tensor_data_as(ngraph::HostTensor* tv, UnaryOperation&& func) {
-    return get_tensor_data_as<T, TResult>(*tv, std::forward<UnaryOperation>(func));
-}
-OPENVINO_SUPPRESS_DEPRECATED_END
 
 /**
  * \brief Get data from ov:tensor as object TResult.
@@ -231,21 +204,21 @@ template <class TShape,
           class TRes = std::vector<TData>,
           class UnaryOperation = ov::util::Cast<TData>,
           typename std::enable_if<!std::is_same<TShape, ov::PartialShape>::value>::type* = nullptr>
-std::unique_ptr<TRes> get_input_const_data_as(const ov::Node* op,
-                                              size_t idx,
-                                              const ITensorAccessor& tensor_accessor,
-                                              UnaryOperation&& func = ov::util::Cast<TData>()) {
+ov::optional<TRes> get_input_const_data_as(const ov::Node* op,
+                                           size_t idx,
+                                           const ITensorAccessor& tensor_accessor,
+                                           UnaryOperation&& func = ov::util::Cast<TData>()) {
     if (auto t = tensor_accessor(idx)) {
-        return std::unique_ptr<TRes>(new TRes(get_tensor_data_as<TData, TRes>(t, std::forward<UnaryOperation>(func))));
+        return {get_tensor_data_as<TData, TRes>(t, std::forward<UnaryOperation>(func))};
     } else {
         const auto& constant = ov::as_type_ptr<ov::opset1::Constant>(op->get_input_node_shared_ptr(idx));
         NODE_VALIDATION_CHECK(op, constant != nullptr, "Static shape inference lacks constant data on port ", idx);
         const auto& et = constant->get_element_type();
         const auto& shape = constant->get_shape();
-        return std::unique_ptr<TRes>(new TRes(get_raw_data_as<TData, TRes>(et,
-                                                                           constant->get_data_ptr(),
-                                                                           shape_size(shape),
-                                                                           std::forward<UnaryOperation>(func))));
+        return {get_raw_data_as<TData, TRes>(et,
+                                             constant->get_data_ptr(),
+                                             shape_size(shape),
+                                             std::forward<UnaryOperation>(func))};
     }
 }
 
@@ -272,20 +245,20 @@ template <class TShape,
           class TRes = std::vector<TData>,
           class UnaryOperation = ov::util::Cast<TData>,
           typename std::enable_if<std::is_same<TShape, ov::PartialShape>::value>::type* = nullptr>
-std::unique_ptr<TRes> get_input_const_data_as(const ov::Node* op,
-                                              size_t idx,
-                                              const ITensorAccessor& tensor_accessor,
-                                              UnaryOperation&& func = ov::util::Cast<TData>()) {
+ov::optional<TRes> get_input_const_data_as(const ov::Node* op,
+                                           size_t idx,
+                                           const ITensorAccessor& tensor_accessor,
+                                           UnaryOperation&& func = ov::util::Cast<TData>()) {
     if (auto t = tensor_accessor(idx)) {
-        return std::unique_ptr<TRes>(new TRes(get_tensor_data_as<TData, TRes>(t, std::forward<UnaryOperation>(func))));
+        return {get_tensor_data_as<TData, TRes>(t, std::forward<UnaryOperation>(func))};
     } else if (const auto& constant =
                    (idx < op->get_input_size()) ? ov::util::get_constant_from_source(op->input_value(idx)) : nullptr) {
         const auto& et = constant->get_element_type();
         const auto& shape = constant->get_shape();
-        return std::unique_ptr<TRes>(new TRes(get_raw_data_as<TData, TRes>(et,
-                                                                           constant->get_data_ptr(),
-                                                                           shape_size(shape),
-                                                                           std::forward<UnaryOperation>(func))));
+        return {get_raw_data_as<TData, TRes>(et,
+                                             constant->get_data_ptr(),
+                                             shape_size(shape),
+                                             std::forward<UnaryOperation>(func))};
     } else {
         return {};
     }
@@ -344,9 +317,7 @@ ov::optional<TShape> get_input_const_data_as_shape(const ov::Node* op,
                                                      c->get_data_ptr(),
                                                      shape_size(c->get_shape()),
                                                      std::forward<UnaryOperation>(func)));
-            OPENVINO_SUPPRESS_DEPRECATED_START
-        } else if (ov::evaluate_as_partial_shape(op->input_value(port), s)) {
-            OPENVINO_SUPPRESS_DEPRECATED_END
+        } else if (ov::util::evaluate_as_partial_shape(op->input_value(port), s)) {
             shape = std::move(s);
         }
     }
@@ -385,19 +356,20 @@ ov::optional<TResult> get_input_bounds(const ov::Node* op, size_t port, const IT
         };
     };
 
+    constexpr auto cast = ov::util::Cast<TData>();
     ov::optional<TResult> out;
 
-    if (auto lowers = op::get_input_const_data_as<TShape, TData>(op, port, ta)) {
-        const auto& et = get_input_const_element_type(op, port, ta);
+    if (const auto t = ta(port)) {
+        const auto& et = t.get_element_type();
+        const auto lowers = get_tensor_data_as<TData>(t, cast);
         out.emplace();
-        out->reserve(lowers->size());
-        std::transform(lowers->cbegin(), lowers->cend(), lowers->begin(), std::back_inserter(*out), make_bound(et));
-    } else {
-        auto bounds = ov::evaluate_both_bounds(op->get_input_source_output(port));
+        out->reserve(lowers.size());
+        std::transform(lowers.cbegin(), lowers.cend(), lowers.cbegin(), std::back_inserter(*out), make_bound(et));
+    } else if (port < op->get_input_size()) {
+        auto bounds = ov::util::evaluate_both_bounds(op->get_input_source_output(port));
 
         if (bounds.first && bounds.second) {
             const auto& et = bounds.first.get_element_type();
-            constexpr auto cast = ov::util::Cast<TData>();
             auto lowers = get_tensor_data_as<TData>(bounds.first, cast);
             auto uppers = get_tensor_data_as<TData>(bounds.second, cast);
 
@@ -405,6 +377,10 @@ ov::optional<TResult> get_input_bounds(const ov::Node* op, size_t port, const IT
             out->reserve(lowers.size());
             std::transform(lowers.begin(), lowers.end(), uppers.begin(), std::back_inserter(*out), make_bound(et));
         }
+    }
+
+    if (!std::is_same<TShape, PartialShape>::value) {
+        NODE_VALIDATION_CHECK(op, out, "Static shape inference lacks constant data on port ", port);
     }
     return out;
 }

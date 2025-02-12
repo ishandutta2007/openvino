@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -74,9 +74,7 @@ void op::v0::RNNCell::validate_and_infer_types() {
     for (size_t i = 0; i <= 4; ++i)
         set_input_is_relevant_to_shape(i);
 
-    OPENVINO_SUPPRESS_DEPRECATED_START
-    const auto input_shapes = get_node_input_partial_shapes(*this);
-    OPENVINO_SUPPRESS_DEPRECATED_END
+    const auto input_shapes = ov::util::get_node_input_partial_shapes(*this);
     auto output_shapes = shape_infer(this, input_shapes);
     set_output_type(0, result_et, output_shapes[0]);
 }

@@ -1,12 +1,10 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
-#include <openvino/core/validation_util.hpp>
-#include <openvino/op/einsum.hpp>
-
+#include "openvino/op/einsum.hpp"
 #include "utils.hpp"
 namespace ov {
 namespace op {
@@ -50,7 +48,7 @@ std::vector<TRShape> shape_infer(const Einsum* op, const std::vector<T>& input_s
                     auto current_sub_pshape = T(std::vector<DimType>(pshape.begin() + dim_ind,
                                                                      pshape.begin() + dim_ind + num_broadcasted_dims));
                     if (label_to_shape.find(label) == label_to_shape.end()) {
-                        label_to_shape[label] = current_sub_pshape;
+                        label_to_shape[label] = std::move(current_sub_pshape);
                     } else {
                         bool is_broadcast_success = TRShape::broadcast_merge_into(label_to_shape[label],
                                                                                   current_sub_pshape,

@@ -1,12 +1,17 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #pragma once
 
 #include <ostream>
+#include <tuple>
 #include "intel_gpu/runtime/layout.hpp"
+#include "intel_gpu/runtime/memory.hpp"
+
+#include "intel_gpu/runtime/shape_predictor.hpp"
 #include "openvino/core/layout.hpp"
+#include "openvino/core/node.hpp"
 #include "openvino/core/type/element_type.hpp"
 
 namespace ov {
@@ -39,6 +44,16 @@ inline cldnn::tensor tensor_from_dims(const ov::Shape& dims, int def = 1) {
     }
 }
 
+template<typename T, typename V>
+std::tuple<V, V, V> get_xyz(const T data, V def) {
+    switch (data.size()) {
+        case 1:  return std::make_tuple(def,                     static_cast<V>(data[0]), def);
+        case 2:  return std::make_tuple(static_cast<V>(data[1]), static_cast<V>(data[0]), def);
+        case 3:  return std::make_tuple(static_cast<V>(data[2]), static_cast<V>(data[1]), static_cast<V>(data[0]));
+        default: return std::make_tuple(def,                     def,                     def);
+    }
+}
+
 inline cldnn::layout make_layout(const ov::element::Type type, const ov::Shape& shape) {
     return cldnn::layout{ov::PartialShape{shape},
                          cldnn::element_type_to_data_type(type),
@@ -48,14 +63,44 @@ inline cldnn::layout make_layout(const ov::element::Type type, const ov::Shape& 
 inline ov::element::Type convert_to_supported_device_type(ov::element::Type et) {
     switch (et) {
         case ov::element::f64:
-        case ov::element::i16:
-        case ov::element::u16:
             return ov::element::f32;
         case ov::element::u64:
-        case ov::element::u32:
             return ov::element::i32;
         default: return et;
     }
+}
+
+bool is_supported(ov::element::Type_t et);
+bool data_types_are_supported(const ov::Node* node);
+
+using PrecisionMap = std::map<ov::element::Type_t, ov::element::Type>;
+
+std::vector<cldnn::optional_data_type> get_output_data_types(const ov::Node* op, PrecisionMap precision_map = {});
+
+inline std::vector<cldnn::optional_data_type> get_output_data_types(const std::shared_ptr<ov::Node>& op, PrecisionMap precision_map = {}) {
+    return get_output_data_types(op.get(), precision_map);
+}
+
+inline ov::Shape get_tensor_shape(const ov::PartialShape& pshape) {
+    ov::Shape res(pshape.size());
+    for (size_t i = 0; i < pshape.size(); i++) {
+        res[i] = pshape[i].is_dynamic() ? 0 : pshape[i].get_length();
+    }
+
+    return res;
+}
+
+inline ov::Shape predict_shape(const std::string& name, const cldnn::layout layout, cldnn::ShapePredictor& shape_predictor) {
+    auto prealloc_info = shape_predictor.predict_preallocation_shape(name, layout, false);
+    const auto& preallocation_shape = prealloc_info.second;
+    auto can_preallocate_buffer = prealloc_info.first &&
+                                    shape_predictor.can_preallocate(cldnn::ceil_div(ov::shape_size(preallocation_shape) *
+                                    ov::element::Type(layout.data_type).bitwidth(), 8));
+    if (can_preallocate_buffer) {
+        return preallocation_shape;
+    }
+
+    return layout.get_shape();
 }
 
 /// WA: Force exit. Any opencl api call can be hang after CL_OUT_OF_RESOURCES.
@@ -68,6 +113,14 @@ inline void ForceExit() {
               << "to avoid CL_OUT_OF_RESOURCES exception" << std::endl;
     std::_Exit(-1);
 }
+
+void convert_and_copy(const ov::ITensor* src,
+                      cldnn::memory::ptr dst,
+                      cldnn::stream& stream,
+                      const cldnn::layout& src_layout = cldnn::layout({}, ov::element::undefined, cldnn::format::bfyx, cldnn::padding()));
+void convert_and_copy(const cldnn::memory::ptr src, ov::ITensor const* dst, const cldnn::stream& stream);
+void convert_and_copy(const ov::ITensor* src, ov::ITensor* dst, const cldnn::stream& stream);
+void convert_and_copy(const cldnn::memory::ptr src, cldnn::memory::ptr dst, cldnn::stream& stream);
 
 }  // namespace intel_gpu
 

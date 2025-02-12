@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -188,9 +188,6 @@ public:
     bool weights_zero_points_term() const { return _impl_params->weights_zero_points_layout.has_value(); }
     bool compensation_term() const { return _impl_params->compensation_layout.has_value(); }
     bool activations_zero_points_term() const { return _impl_params->activations_zero_points_layout.has_value(); }
-
-    void save(cldnn::BinaryOutputBuffer& ob) const override;
-    void load(cldnn::BinaryInputBuffer& ib) override;
 
 private:
     int32_t _deform_conv_dep_offset = 0;

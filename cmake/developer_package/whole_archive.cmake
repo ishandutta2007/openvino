@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2023 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -50,11 +50,4 @@ function(ov_target_link_whole_archive targetName)
     if(libs)
         target_link_libraries(${targetName} PRIVATE ${libs})
     endif()
-endfunction()
-
-# deprecated
-
-function(ieTargetLinkWholeArchive)
-    message(WARNING "'ieTargetLinkWholeArchive' is deprecated, use 'ov_target_link_whole_archive' instead")
-    ov_target_link_whole_archive(${ARGN})
 endfunction()

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,22 +6,29 @@
 
 #include <cstring>
 
-#include "openvino/core/deprecated.hpp"
 #include "openvino/core/shape_util.hpp"
 
 namespace ov {
 namespace reference {
+
 void function(const std::shared_ptr<Model>& function, const ov::TensorVector& inputs, ov::TensorVector& outputs) {
-    const auto& results = function->get_results();
-    outputs.reserve(results.size());
-    for (size_t i = 0; i < results.size(); ++i) {
-        OPENVINO_SUPPRESS_DEPRECATED_START
-        auto shape = results[i]->get_output_partial_shape(0).is_static() ? results[i]->get_output_shape(0)
-                                                                         : ov::util::make_dynamic_shape();
-        OPENVINO_SUPPRESS_DEPRECATED_END
-        outputs.push_back(ov::Tensor(results[i]->get_element_type(), shape));
+    outputs.reserve(function->get_output_size());
+    for (const auto& result : function->get_results()) {
+        outputs.emplace_back(result->output(0));
     }
     function->evaluate(outputs, inputs);
 }
+
+void function(const std::shared_ptr<Model>& function,
+              const ov::TensorVector& inputs,
+              ov::TensorVector& outputs,
+              const EvaluationContext& evaluation_context) {
+    outputs.reserve(function->get_output_size());
+    for (const auto& result : function->get_results()) {
+        outputs.emplace_back(result->output(0));
+    }
+    function->evaluate(outputs, inputs, const_cast<EvaluationContext&>(evaluation_context));
+}
+
 }  // namespace reference
 }  // namespace ov

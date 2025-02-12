@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -2175,6 +2175,76 @@ TEST(permute_gpu_f32_dynamic, bfyx_0_2_3_1) {
     }
 }
 
+TEST(permute_f_y_axes_fallback, b_fs_yx_fsv16) {
+    constexpr size_t array_size = 128;
+
+    auto& engine = get_test_engine();
+    if (!engine.get_device_info().supports_immad)
+        return;
+
+    auto input_layout_static = layout{ov::PartialShape{1, 8, 16, 1}, data_types::f32, format::bfyx};
+    auto input = engine.allocate_memory(input_layout_static);
+
+    std::vector<float> input_data;
+    input_data.reserve(array_size);
+    for (size_t i = 0; i < array_size; ++i)
+        input_data.push_back(static_cast<float>(i));
+
+    auto weights = engine.allocate_memory({ data_types::f32, format::bfyx, { 8, 16, 1, 1 } });
+
+    std::vector<float> weights_data;
+    weights_data.reserve(array_size);
+    for (size_t i = 0; i < array_size; ++i)
+      weights_data.push_back(static_cast<float>(1.0));
+
+    set_values(weights, weights_data);
+    set_values(input, input_data);
+
+    auto impl_desc_onednn = ov::intel_gpu::ImplementationDesc{format::b_fs_yx_fsv16, "", impl_types::onednn};
+    auto impl_forcing_map = ov::intel_gpu::ImplForcingMap{{"conv", impl_desc_onednn}};
+
+    topology topology;
+    topology.add(input_layout("input", input_layout_static));
+    topology.add(permute("permute", input_info("input"), { 0, 2, 1, 3 }));
+    topology.add(data("weights", weights));
+    topology.add(convolution("conv", input_info("permute"), "weights", "", 1, {1,1}, {1,1}, {0,0}, {0,0}, false));
+
+    ExecutionConfig config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::force_implementations(impl_forcing_map));
+
+    network network(engine, topology, config);
+    network.set_input_data("input", input);
+    auto outputs = network.execute();
+    ASSERT_EQ(outputs.size(), size_t(1));
+    ASSERT_EQ(outputs.begin()->first, "conv");
+
+    auto output = outputs.begin()->second.get_memory();
+
+    float answers[] = {
+        120.f, 120.f, 120.f, 120.f, 120.f, 120.f, 120.f, 120.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        376.f, 376.f, 376.f, 376.f, 376.f, 376.f, 376.f, 376.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        632.f, 632.f, 632.f, 632.f, 632.f, 632.f, 632.f, 632.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        888.f, 888.f, 888.f, 888.f, 888.f, 888.f, 888.f, 888.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        1144.f, 1144.f, 1144.f, 1144.f, 1144.f, 1144.f, 1144.f, 1144.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        1400.f, 1400.f, 1400.f, 1400.f, 1400.f, 1400.f, 1400.f, 1400.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        1656.f, 1656.f, 1656.f, 1656.f, 1656.f, 1656.f, 1656.f, 1656.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+        1912.f, 1912.f, 1912.f, 1912.f, 1912.f, 1912.f, 1912.f, 1912.f,
+        0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f,
+    };
+
+    cldnn::mem_lock<float> output_ptr(output, get_test_stream());
+    for (size_t i = 0; i < array_size; i++) {
+        ASSERT_FLOAT_EQ(answers[i], output_ptr[i]);
+    }
+}
+
 class permute_bfzyx_to_bfyxz: public TiledPermuteTest {};
 
 INSTANTIATE_TEST_SUITE_P(, permute_bfzyx_to_bfyxz,
@@ -2248,18 +2318,40 @@ TEST_P(permute_tile_fsv_5d, i64_cached) {
 
 class permute_f_y_axes_tile: public TiledPermuteTest {};
 
-// Test cases are disabled because permute_f_y_axes_tile kernel itself is disabled for accuracy issue
-// INSTANTIATE_TEST_SUITE_P(smoke_permute_f_y_axes_tile,
-//                          permute_f_y_axes_tile,
-//                          ::testing::ValuesIn(std::vector<TiledPermuteParam>{
-//                              {{1, 4, 8, 1}, format::bfyx},                // permute_f_y_axes
-//                              {{1, 64, 32, 1}, format::bfyx},              // permute_f_y_axes
-//                              {{1, 32, 256, 512}, format::b_fs_yx_fsv32},  // THREE_DIM_TRANSPOSE
-//                              {{1, 32, 256, 512}, format::bfyx},           // PERMUTE_SIMPLE_MEM_COPY
-//                              {{1, 256, 256, 1}, format::b_fs_yx_fsv32},   // permute_f_y_axes
-//                              {{1, 32, 16, 4}, format::b_fs_yx_fsv16},     // THREE_DIM_TRANSPOSE
-//                          }),
-//                          TiledPermuteTest::PrintToStringParamName);
+INSTANTIATE_TEST_SUITE_P(smoke_permute_f_y_axes_tile,
+                         permute_f_y_axes_tile,
+                         ::testing::ValuesIn(std::vector<TiledPermuteParam>{
+                             {{1, 4, 8, 1}, format::bfyx},                // permute_f_y_axes
+                             {{1, 64, 32, 1}, format::bfyx},              // permute_f_y_axes
+                             {{1, 32, 256, 512}, format::b_fs_yx_fsv32},  // THREE_DIM_TRANSPOSE
+                             {{1, 32, 256, 512}, format::bfyx},           // PERMUTE_SIMPLE_MEM_COPY
+                             {{1, 256, 256, 1}, format::b_fs_yx_fsv32},   // permute_f_y_axes
+                             {{1, 32, 16, 4}, format::b_fs_yx_fsv16},     // THREE_DIM_TRANSPOSE
+                             //4 batch version
+                             {{4, 4, 4, 1}, format::bfyx},                // permute_f_y_axes
+                             //32 batch version
+                             {{32, 4, 8, 1}, format::bfyx},                // permute_f_y_axes
+                             {{32, 64, 32, 1}, format::bfyx},              // permute_f_y_axes
+                             {{32, 128, 196, 1}, format::bfyx},              // permute_f_y_axes
+                             {{32, 196, 4, 16}, format::bfyx},              // permute_f_y_axes
+                             {{32, 196, 4, 32}, format::bfyx},              // permute_f_y_axes
+                             {{32, 4, 196, 32}, format::bfyx},              // permute_f_y_axes
+                             {{32, 196, 128, 1}, format::bfyx},              // permute_f_y_axes
+                             {{32, 196, 8, 16}, format::bfyx},              // permute_f_y_axes
+                             {{16, 32, 128, 512}, format::b_fs_yx_fsv32},  // THREE_DIM_TRANSPOSE
+                             {{16, 32, 128, 512}, format::bfyx},           // PERMUTE_SIMPLE_MEM_COPY
+                             {{32, 256, 256, 1}, format::b_fs_yx_fsv32},   // permute_f_y_axes
+                             {{32, 32, 16, 4}, format::b_fs_yx_fsv16},     // THREE_DIM_TRANSPOSE
+                             {{32, 16, 16, 16}, format::bfyx}, 
+                             {{32, 16, 8, 16}, format::bfyx}, 
+                             {{32, 16, 16, 64}, format::bfyx},
+                             {{32, 16, 8, 32}, format::bfyx}, 
+                             {{32, 8, 16, 32}, format::bfyx},
+                             {{32, 196, 8, 64}, format::bfyx},           // permute_f_y_axes
+                             {{1, 512, 30, 1}, format::bfyx},            // fix for JTIMES=0
+                             {{1, 2, 512, 10}, format::bfyx},            //case trying to set vec size(4) bigger than x divisor(2) in case of f16
+                         }),
+                         TiledPermuteTest::PrintToStringParamName);
 
 TEST_P(permute_f_y_axes_tile, combined) {
     auto p = GetParam();
@@ -2312,15 +2404,14 @@ struct TiledPerformancePermuteTest : TiledPermuteTest
         }
         std::cout << std::endl;
     }
-
+    
     template<data_types Data_Type>
     void execute_perf_test(const std::vector<cldnn::tensor::value_type>& sizes, cldnn::format format_fsv,
                             const std::string & kernel_name, std::vector<uint16_t> permute_order)
     {
         auto& engine = get_test_engine();
-        // convert ov::float16 to ov::float16
-        using type_ = typename ov::element_type_traits<Data_Type>::value_type;
-        using type = typename std::conditional<std::is_same<type_, ov::float16>::value, ov::float16, type_>::type;
+        // convert half_t to FLOAT16
+        using type = typename ov::element_type_traits<Data_Type>::value_type;
 
         std::vector<cldnn::tensor::value_type> internal_sizes(sizes);
         std::swap(internal_sizes.at(2), internal_sizes.back());
@@ -2405,13 +2496,16 @@ struct TiledPerformancePermuteTest : TiledPermuteTest
                   << frm_str << " " << input_type << " " << exectime_opt << std::endl;
 
     }
+    
 };
+
 
 // No need to run performance tests on CI
 TEST_P(TiledPerformancePermuteTest, DISABLED_f32) {
     auto p = GetParam();
     execute_perf_test<cldnn::data_types::f32>(p.sizes, p.format_fsv, "permute_f_y_axes", {0, 2, 1, 3});
 }
+
 
 INSTANTIATE_TEST_SUITE_P(, TiledPerformancePermuteTest,
     ::testing::ValuesIn(std::vector<TiledPermuteParam> {
